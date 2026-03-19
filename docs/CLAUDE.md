@@ -7,6 +7,7 @@ Project documentation for architecture decisions, process notes, and operational
 - ADR files live in `docs/adr/` and use the `ADR-XXX-title.md` naming pattern.
 - ADRs should include: Date, Status, Context, Decision, Consequences.
 - Keep ADR status explicit (`Proposed`, `Accepted`, `Superseded`) and update when approved.
+- UX guidance docs should enforce toast-based user notifications/errors rather than inline page text alerts for action feedback.
 
 ## Updates 2026-03-19
 - Added `docs/adr/ADR-004-business-onboarding.md` as a proposed decision for Layer 3 onboarding + admin approval gate.
@@ -31,3 +32,6 @@ Project documentation for architecture decisions, process notes, and operational
 - Added ADR-010 (Accepted) for subtle AI-assisted menu authoring: top-5 category/item suggestions (excluding existing entries), dietary-tag auto-fill from selected suggestions, and visible dietary-tag display in dashboard menu list.
 - Added ADR-011 (Accepted) to evolve ADR-010 suggestions into LLM-driven, context-aware top-5 recommendations with typed-text autocomplete and deterministic fallback.
 - ADR-011 was refined to enforce singleton AI model/client instantiation per API process and to use dedicated AI endpoint namespace (`/api/ai/menu/item-suggestions`).
+- Added ADR-012 (Accepted) for dashboard menu visual refresh: color-accented category cards and per-item image placeholder with `Upload` and `Generate AI` entry points (UI-first, backend persistence deferred).
+- Added ADR-013 (Accepted) for item description authoring: manual description input/edit plus AI-generated description endpoint (`/api/ai/menu/item-description`) with deterministic fallback.
+- Recorded cross-app UX messaging policy: prefer toasts for user notifications/errors; avoid inline banner/text feedback patterns.

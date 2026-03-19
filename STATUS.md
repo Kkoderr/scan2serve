@@ -11,32 +11,34 @@
 
 **Date:** 2026-03-20
 **What was done:**
-- Implemented AI suggestion continuity fix so suggestions do not dry up after many items:
-  - `apps/api/src/services/llmMenuSuggestions.ts` now requests a wider LLM candidate pool (`limit * 6`, capped at 50) and trims only after filtering/dedupe/ranking.
-  - `apps/api/src/services/menuSuggestions.ts` deterministic fallback now backfills from a global deduped item pool when category-local lists are exhausted.
-- Implemented dashboard suggestion UX fixes in `apps/web/src/app/dashboard/menu/page.tsx`:
-  - switched item suggestion calls to dedicated AI endpoint `/api/ai/menu/item-suggestions`,
-  - category changes now trigger category-specific suggestion reload,
-  - during typed search fetch, stale suggestions are cleared (no suggestion chips shown while request is in-flight).
-- Added tests:
-  - `apps/api/tests/llmMenuSuggestions.service.test.ts` for wide candidate requests + fallback fill behavior.
-  - `apps/web/tests/menu-page.test.tsx` coverage for category-change refresh and in-flight search suggestion clearing.
-- Revalidated quality gates:
-  - `pnpm --filter @scan2serve/api test -- llmMenuSuggestions.service.test.ts llmMenuSuggestions.test.ts` (passes; full API suite run also passed),
-  - `pnpm --filter @scan2serve/web test -- menu-page.test.tsx` (passes),
-  - `pnpm --filter @scan2serve/api build` and `pnpm --filter @scan2serve/web build` (pass).
+- Implemented a global web toast system:
+  - added `apps/web/src/lib/toast.ts` (toast emitter utility),
+  - added `apps/web/src/components/ui/toast-viewport.tsx` (toast renderer),
+  - mounted toast viewport in `apps/web/src/app/layout.tsx`.
+- Replaced inline error/notification text with toasts in major web flows:
+  - `apps/web/src/app/(auth)/login/page.tsx`,
+  - `apps/web/src/app/(auth)/register/business/page.tsx`,
+  - `apps/web/src/app/qr/login/page.tsx`,
+  - `apps/web/src/app/qr/register/page.tsx`,
+  - `apps/web/src/app/admin/page.tsx`,
+  - `apps/web/src/app/dashboard/onboarding/page.tsx`,
+  - `apps/web/src/app/dashboard/menu/page.tsx`.
+- Added toast success/info feedback for moderation actions, onboarding save success, and menu image-placeholder actions.
+- Verified web quality gates:
+  - `pnpm --filter @scan2serve/web test` (passes),
+  - `pnpm --filter @scan2serve/web build` (passes).
 
 **What's NOT done yet:**
 - Layer 4 remaining work:
   - optional UI polish for inline edit UX and bulk actions.
-  - no image upload pipeline yet (URL-only per ADR-007).
+  - no backend image upload/generation persistence yet (ADR-012 is UI entry-point only).
 - Layer 5+ features (tables/QR advanced flows, ordering/payments, dashboards) are still pending.
 - Production cookie/CORS hardening review still pending once deploy targets are fixed.
 
-**Next step:** Harden AI suggestion performance and diversity
-1. Add lightweight in-memory cache + TTL for `/api/ai/menu/item-suggestions` to reduce repeated LLM calls on similar typed queries.
-2. Add request concurrency limiting for LLM calls to protect API latency under bursts.
-3. Tune prompt/ranking policy further for better novelty/diversity across large existing menus.
+**Next step:** Continue menu authoring completion
+1. Add upload API contract and storage path (local/S3) for item image persistence.
+2. Add AI image generation endpoint contract and connect `Generate AI` UI action.
+3. Add description tone controls and moderation/length guardrails for AI-generated copy.
 
 **Build progress:**
 ```
@@ -278,6 +280,73 @@ Layer 11: Polish & Deploy
   - `apps/web/tests/menu-page.test.tsx` (category-change + in-flight clearing scenarios).
 - Revalidated API/web tests and both builds successfully.
 
+### 2026-03-20 — Session 36: Dashboard menu lock-state UX refinement
+- Removed `All categories` selector from dashboard category rail to simplify category-scoped workflow.
+- Updated `apps/web/src/app/dashboard/menu/page.tsx` so menu items panel stays blurred/locked until at least one category exists.
+- Added first-time setup helper copy in menu panel (`Add your first category to unlock menu item management.`).
+- Auto-selects first category when available and keeps selected category valid after category mutations.
+- Added web regression test for no-category locked state and absence of `All categories` in `apps/web/tests/menu-page.test.tsx`.
+- Revalidated web tests/build.
+
+### 2026-03-20 — Session 37: Dashboard menu visual polish with icon actions
+- Replaced category/menu-item row action text buttons with icon-only controls (move/edit/delete) in `apps/web/src/app/dashboard/menu/page.tsx`.
+- Added accessibility labels/titles to icon controls so interaction semantics remain explicit for users and tests.
+- Refreshed category and menu item card design with cleaner spacing and subtle gradient/surface styling.
+- Updated menu test selectors in `apps/web/tests/menu-page.test.tsx` to use accessible labels for icon buttons.
+- Revalidated web tests/build successfully.
+
+### 2026-03-20 — Session 38: ADR-012 category color + item image entry UI
+- Marked ADR-012 as `Accepted` and implemented menu UI visual refresh scope.
+- Upgraded category cards to color-accented gradient styling for better visual distinction.
+- Added item image preview/placeholder block to menu cards and introduced `Upload image` + `Generate AI image` UI actions (non-persistent hooks in this pass).
+- Added web test coverage for placeholder/actions and image-preview rendering in `apps/web/tests/menu-page.test.tsx`.
+- Revalidated web tests/build successfully.
+
+### 2026-03-20 — Session 39: UI feedback pass on category cards and item image controls
+- Reworked category cards to cleaner styling with colored side accents and reduced visual noise versus prior gradient-heavy look.
+- Moved item image action buttons directly below image placeholder/preview and converted both actions to icon-only controls.
+- Kept accessibility intact through `aria-label` + tooltip titles for icon-only image actions.
+- Updated tests and revalidated web test/build successfully.
+
+### 2026-03-20 — Session 40: ADR-013 item description authoring + AI generation
+- Marked ADR-013 as `Accepted`.
+- Added AI description endpoint `POST /api/ai/menu/item-description` under dedicated AI namespace with business/category validation and fallback description behavior.
+- Extended singleton LLM client with description generation support and reused existing timeout/error conventions.
+- Added manual description authoring in dashboard create/edit flows plus AI description generation actions.
+- Updated menu item card rendering to display description when available.
+- Added API/web tests for description generation and revalidated API/web tests and builds.
+
+### 2026-03-20 — Session 41: Description icon + section separator UI refinement
+- Moved create/edit `Generate Description` actions into description textareas as icon-only inline controls in `apps/web/src/app/dashboard/menu/page.tsx`.
+- Updated menu-page test selectors to target the new accessible icon control labels in `apps/web/tests/menu-page.test.tsx`.
+- Improved dashboard menu sectioning: category panel now uses faded gradient grouped regions and menu panel uses subtle gradient divider lines.
+- Revalidated web tests (`pnpm --filter @scan2serve/web test -- menu-page.test.tsx`) and confirmed passing.
+
+### 2026-03-20 — Session 42: Suggestions embedded into input fields
+- Updated `apps/web/src/app/dashboard/menu/page.tsx` so category suggestions are attached to the category input and item suggestions are attached to the item-name input as inline dropdown chip panels.
+- Removed the standalone suggested-menu-items block beneath the create-item form to keep suggestion context local to the input being edited.
+- Revalidated targeted web tests: `pnpm --filter @scan2serve/web test -- menu-page.test.tsx` passed.
+
+### 2026-03-20 — Session 43: Suggestions kept inline without dropdown behavior
+- Updated `apps/web/src/app/dashboard/menu/page.tsx` to remove absolute-position dropdown overlays for suggestions and keep category/item suggestion chips inline in their respective input blocks.
+- Kept suggestion click-to-fill/autotag behavior unchanged.
+- Revalidated targeted web tests: `pnpm --filter @scan2serve/web test -- menu-page.test.tsx` passed.
+
+### 2026-03-20 — Session 44: Visual rollback for category/menu separators
+- Reverted category faded-gradient grouping and menu-section gradient divider lines in `apps/web/src/app/dashboard/menu/page.tsx` per UI feedback.
+- Restored neutral bordered section containers while retaining the newer inline in-block suggestion chips.
+- Revalidated targeted web tests: `pnpm --filter @scan2serve/web test -- menu-page.test.tsx` passed.
+
+### 2026-03-20 — Session 45: Toast-only messaging policy added to CLAUDE files
+- Updated `CLAUDE.md`, `apps/web/CLAUDE.md`, `apps/api/CLAUDE.md`, `docs/CLAUDE.md`, and `packages/shared/CLAUDE.md` with explicit guidance that user notifications/errors should be delivered via toasts rather than inline page text.
+- Captured the policy in both conventions and dated updates sections to keep future agent behavior consistent.
+
+### 2026-03-20 — Session 46: Web toast system + inline message migration
+- Added a lightweight global toast system in web app (`src/lib/toast.ts` + `src/components/ui/toast-viewport.tsx`) and mounted it in root layout.
+- Migrated inline error/notification text to toast-driven feedback in login, business registration, QR login/register, admin moderation, onboarding, and dashboard menu pages.
+- Removed inline menu error text rendering and kept blocked/helper content intact; action feedback now emits toast events.
+- Revalidated `@scan2serve/web` with full tests and production build.
+
 ---
 
 ## Decisions Log
@@ -293,6 +362,8 @@ Layer 11: Polish & Deploy
 | ADR-009 | API singleton logger and structured request logs | Centralize backend logs in one logger and improve endpoint diagnostics with request lifecycle context | 2026-03-20 |
 | ADR-010 | AI-assisted menu suggestions and dietary auto-fill | Introduce subtle assistive suggestions for category/item authoring and improve dietary-tag visibility | 2026-03-20 |
 | ADR-011 | LLM-driven menu suggestions with typed autocomplete | Improve relevance of top-5 suggestions using category context + typed text while preserving deterministic fallback | 2026-03-20 |
+| ADR-012 | Menu UI color refresh + item image entry points | Improve dashboard menu aesthetics and add item image placeholder plus Upload/Generate AI entry controls via UI-first incremental rollout | 2026-03-20 |
+| ADR-013 | Item description authoring + AI description generation | Support manual item descriptions and add AI-generated copy with fallback via `/api/ai/menu/item-description` | 2026-03-20 |
 
 ---
 

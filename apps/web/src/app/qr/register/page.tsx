@@ -1,9 +1,10 @@
 "use client";
 
 import { Suspense } from "react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "../../../lib/auth-context";
+import { showToast } from "../../../lib/toast";
 
 function QrRegisterForm() {
   const { registerCustomerFromQr, error } = useAuth();
@@ -13,6 +14,17 @@ function QrRegisterForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!error) return;
+    showToast({ variant: "error", message: error });
+  }, [error]);
+
+  useEffect(() => {
+    if (qrToken) return;
+    showToast({ variant: "error", message: "Invalid QR registration link." });
+    router.replace("/home");
+  }, [qrToken, router]);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -33,13 +45,7 @@ function QrRegisterForm() {
     }
   };
 
-  if (!qrToken) {
-    return (
-      <main className="min-h-screen flex items-center justify-center p-6">
-        <p className="text-sm text-red-600">Invalid QR registration link.</p>
-      </main>
-    );
-  }
+  if (!qrToken) return null;
 
   return (
     <main className="min-h-screen flex items-center justify-center">
@@ -66,7 +72,6 @@ function QrRegisterForm() {
               className="mt-1 w-full rounded-md border px-3 py-2"
             />
           </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
           <button
             type="submit"
             disabled={loading}

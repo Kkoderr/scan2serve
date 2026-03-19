@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { DIETARY_TAGS, type Category, type MenuItem } from "@scan2serve/shared";
 import { useAuth } from "../../../lib/auth-context";
 import { apiFetch } from "../../../lib/api";
+import { showToast } from "../../../lib/toast";
 
 type MenuItemsResponse = {
   items: MenuItem[];
@@ -28,6 +29,56 @@ type ItemEditDraft = {
   description: string;
 };
 
+type IconProps = {
+  className?: string;
+};
+
+const ChevronUpIcon = ({ className = "h-4 w-4" }: IconProps) => (
+  <svg viewBox="0 0 20 20" fill="none" className={className} aria-hidden="true">
+    <path d="M5 12.5L10 7.5L15 12.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+  </svg>
+);
+
+const ChevronDownIcon = ({ className = "h-4 w-4" }: IconProps) => (
+  <svg viewBox="0 0 20 20" fill="none" className={className} aria-hidden="true">
+    <path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+  </svg>
+);
+
+const PencilIcon = ({ className = "h-4 w-4" }: IconProps) => (
+  <svg viewBox="0 0 20 20" fill="none" className={className} aria-hidden="true">
+    <path d="M13.8 3.2L16.8 6.2L7 16H4V13L13.8 3.2Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+  </svg>
+);
+
+const TrashIcon = ({ className = "h-4 w-4" }: IconProps) => (
+  <svg viewBox="0 0 20 20" fill="none" className={className} aria-hidden="true">
+    <path d="M4.5 6H15.5M7.2 6V4.5H12.8V6M6.5 6L7 15.5H13L13.5 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const SparkleIcon = ({ className = "h-4 w-4" }: IconProps) => (
+  <svg viewBox="0 0 20 20" fill="none" className={className} aria-hidden="true">
+    <path d="M10 2.5L11.8 7.1L16.5 8.9L11.8 10.7L10 15.3L8.2 10.7L3.5 8.9L8.2 7.1L10 2.5Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+  </svg>
+);
+
+const ImageIcon = ({ className = "h-4 w-4" }: IconProps) => (
+  <svg viewBox="0 0 20 20" fill="none" className={className} aria-hidden="true">
+    <rect x="3.5" y="4" width="13" height="12" rx="2" stroke="currentColor" strokeWidth="1.4" />
+    <circle cx="7.2" cy="8" r="1.2" stroke="currentColor" strokeWidth="1.2" />
+    <path d="M4.5 14L8.7 10.2L11.4 12.4L13.3 10.8L15.5 14" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const CATEGORY_CARD_TONES = [
+  "border-l-sky-500",
+  "border-l-emerald-500",
+  "border-l-amber-500",
+  "border-l-violet-500",
+  "border-l-rose-500",
+];
+
 export default function DashboardMenuPage() {
   const { user, loading, selectedBusiness } = useAuth();
   const router = useRouter();
@@ -43,14 +94,16 @@ export default function DashboardMenuPage() {
   const [editingCategoryName, setEditingCategoryName] = useState("");
   const [itemName, setItemName] = useState("");
   const [itemPrice, setItemPrice] = useState("0.00");
+  const [itemDescription, setItemDescription] = useState("");
   const [itemTags, setItemTags] = useState<string[]>([]);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [itemEditDraft, setItemEditDraft] = useState<ItemEditDraft | null>(null);
   const [categorySuggestions, setCategorySuggestions] = useState<Suggestion[]>([]);
   const [itemSuggestions, setItemSuggestions] = useState<Suggestion[]>([]);
-  const [itemSuggestionsLoading, setItemSuggestionsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [generatingDescription, setGeneratingDescription] = useState(false);
+  const [generatingEditDescription, setGeneratingEditDescription] = useState(false);
   const suggestionRequestIdRef = useRef(0);
 
   const blocked =
@@ -71,12 +124,18 @@ export default function DashboardMenuPage() {
       headers,
     });
     setCategories(categoryData.categories);
+    if (categoryData.categories.length === 0) {
+      setSelectedCategoryId("");
+      return categoryData.categories;
+    }
+
     if (
-      selectedCategoryId &&
+      !selectedCategoryId ||
       !categoryData.categories.some((category) => category.id === selectedCategoryId)
     ) {
-      setSelectedCategoryId("");
+      setSelectedCategoryId(categoryData.categories[0].id);
     }
+
     return categoryData.categories;
   };
 
@@ -103,12 +162,10 @@ export default function DashboardMenuPage() {
     const targetCategoryId = categoryId || selectedCategoryId || categories[0]?.id;
     if (!targetCategoryId) {
       setItemSuggestions([]);
-      setItemSuggestionsLoading(false);
       return;
     }
     const requestId = suggestionRequestIdRef.current + 1;
     suggestionRequestIdRef.current = requestId;
-    setItemSuggestionsLoading(true);
     setItemSuggestions([]);
 
     const q = query?.trim() || itemName.trim();
@@ -128,7 +185,6 @@ export default function DashboardMenuPage() {
     );
     if (suggestionRequestIdRef.current !== requestId) return;
     setItemSuggestions(data?.suggestions ?? []);
-    setItemSuggestionsLoading(false);
   };
 
   const loadItems = async (page: number) => {
@@ -150,6 +206,11 @@ export default function DashboardMenuPage() {
   }, [loading, user, router]);
 
   useEffect(() => {
+    if (!error) return;
+    showToast({ variant: "error", message: error });
+  }, [error]);
+
+  useEffect(() => {
     if (!blocked) {
       Promise.all([loadCategories(), loadItems(1), loadCategorySuggestions()]).catch((err) =>
         setError(err instanceof Error ? err.message : "Failed to load menu")
@@ -165,7 +226,6 @@ export default function DashboardMenuPage() {
         categoryId: selectedCategoryId || categories[0]?.id,
         query: itemName,
       }).catch((err) => {
-        setItemSuggestionsLoading(false);
         setError(err instanceof Error ? err.message : "Failed to load item suggestions");
       });
     }, delayMs);
@@ -182,10 +242,9 @@ export default function DashboardMenuPage() {
     return <main className="min-h-screen p-8">Only business users can manage menu.</main>;
   }
 
+  const hasCategories = categories.length > 0;
   const totalPages = Math.max(1, Math.ceil(itemTotal / itemLimit));
-  const filteredItems = items.filter((item) =>
-    selectedCategoryId ? item.categoryId === selectedCategoryId : true
-  );
+  const filteredItems = items.filter((item) => item.categoryId === selectedCategoryId);
 
   const createCategory = async (e: FormEvent) => {
     e.preventDefault();
@@ -225,11 +284,13 @@ export default function DashboardMenuPage() {
         body: JSON.stringify({
           categoryId: targetCategoryId,
           name: itemName.trim(),
+          description: itemDescription.trim() || null,
           price: itemPrice,
           dietaryTags: itemTags,
         }),
       });
       setItemName("");
+      setItemDescription("");
       setItemPrice("0.00");
       setItemTags([]);
       await loadItems(1);
@@ -426,33 +487,110 @@ export default function DashboardMenuPage() {
     }
   };
 
+  const generateDescription = async ({
+    itemNameValue,
+    categoryIdValue,
+    dietaryTagsValue,
+  }: {
+    itemNameValue: string;
+    categoryIdValue: string;
+    dietaryTagsValue: string[];
+  }) => {
+    if (!headers || !selectedBusiness || !itemNameValue.trim()) return null;
+    const result = await apiFetch<{ description: string }>("/api/ai/menu/item-description", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        businessId: selectedBusiness.id,
+        categoryId: categoryIdValue,
+        itemName: itemNameValue.trim(),
+        dietaryTags: dietaryTagsValue,
+      }),
+    });
+    return result.description;
+  };
+
+  const handleGenerateCreateDescription = async () => {
+    const targetCategoryId = selectedCategoryId || categories[0]?.id;
+    if (!targetCategoryId || !itemName.trim()) return;
+    setGeneratingDescription(true);
+    setError(null);
+    try {
+      const description = await generateDescription({
+        itemNameValue: itemName,
+        categoryIdValue: targetCategoryId,
+        dietaryTagsValue: itemTags,
+      });
+      if (description) setItemDescription(description);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to generate description");
+    } finally {
+      setGeneratingDescription(false);
+    }
+  };
+
+  const handleGenerateEditDescription = async () => {
+    if (!itemEditDraft || !itemEditDraft.name.trim()) return;
+    setGeneratingEditDescription(true);
+    setError(null);
+    try {
+      const description = await generateDescription({
+        itemNameValue: itemEditDraft.name,
+        categoryIdValue: itemEditDraft.categoryId,
+        dietaryTagsValue: itemEditDraft.dietaryTag ? [itemEditDraft.dietaryTag] : [],
+      });
+      if (description) {
+        setItemEditDraft((prev) => (prev ? { ...prev, description } : prev));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to generate description");
+    } finally {
+      setGeneratingEditDescription(false);
+    }
+  };
+
+  const handleUploadImage = (item: MenuItem) => {
+    showToast({
+      variant: "info",
+      message: `Image upload flow for "${item.name}" will be enabled in the next step.`,
+    });
+  };
+
+  const handleGenerateAiImage = (item: MenuItem) => {
+    showToast({
+      variant: "info",
+      message: `AI image generation for "${item.name}" will be enabled in the next step.`,
+    });
+  };
+
   return (
     <main className="min-h-screen bg-gray-50 p-6">
       <section className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[320px_1fr]">
         <aside className="rounded-xl border bg-white p-4">
           <h2 className="text-lg font-semibold">Categories</h2>
-          <form onSubmit={createCategory} className="mt-3 flex gap-2">
-            <input
-              value={categoryName}
-              onChange={(e) => setCategoryName(e.target.value)}
-              placeholder="New category"
-              className="w-full rounded-md border px-3 py-2 text-sm"
-            />
-            <button
-              type="submit"
-              disabled={busy || blocked}
-              className="rounded-md bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
-            >
-              Add
-            </button>
-          </form>
-          {!!categorySuggestions.length && (
-            <div className="mt-3">
-              <p className="text-xs font-medium text-gray-600">Suggested categories</p>
-              <div className="mt-2 flex flex-wrap gap-2">
+          <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+            <form onSubmit={createCategory} className="flex gap-2">
+                <input
+                  value={categoryName}
+                  onChange={(e) => setCategoryName(e.target.value)}
+                  placeholder="New category"
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                />
+                <button
+                  type="submit"
+                  disabled={busy || blocked}
+                  className="rounded-md bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
+                >
+                  Add
+                </button>
+            </form>
+            <div className="mt-2">
+              <p className="text-[11px] font-medium text-gray-500">Suggestions</p>
+              <div className="mt-1.5 flex min-h-[30px] flex-wrap gap-1.5">
                 {categorySuggestions.map((suggestion) => (
                   <button
                     key={suggestion.label}
+                    type="button"
                     onClick={() => setCategoryName(suggestion.label)}
                     disabled={busy || blocked}
                     className="rounded-full border border-gray-300 px-2 py-1 text-xs"
@@ -462,19 +600,15 @@ export default function DashboardMenuPage() {
                 ))}
               </div>
             </div>
-          )}
-          <button
-            onClick={() => setSelectedCategoryId("")}
-            disabled={busy}
-            className={`mt-3 w-full rounded-md border px-3 py-2 text-left text-sm ${
-              selectedCategoryId === "" ? "border-black bg-gray-100" : "border-gray-200"
-            }`}
-          >
-            All categories
-          </button>
-          <div className="mt-4 space-y-2">
+          </div>
+          <div className="mt-4 space-y-2 rounded-lg border border-slate-200 bg-white p-3">
             {categories.map((category, idx) => (
-              <div key={category.id} className="rounded-md border border-gray-200 p-2">
+              <div
+                key={category.id}
+                className={`rounded-xl border border-slate-200 border-l-4 bg-white p-3 shadow-sm ${
+                  CATEGORY_CARD_TONES[idx % CATEGORY_CARD_TONES.length]
+                }`}
+              >
                 {editingCategoryId === category.id ? (
                   <div className="space-y-2">
                     <input
@@ -506,42 +640,50 @@ export default function DashboardMenuPage() {
                   <div className="space-y-2">
                     <button
                       onClick={() => setSelectedCategoryId(category.id)}
-                      className={`w-full rounded-md border px-3 py-2 text-left text-sm ${
+                      className={`w-full rounded-lg border px-3 py-2 text-left text-sm font-medium transition ${
                         selectedCategoryId === category.id
-                          ? "border-black bg-gray-100"
-                          : "border-gray-200"
+                          ? "border-slate-400 bg-slate-100 text-slate-900 shadow-sm"
+                          : "border-slate-200 bg-white text-slate-800 hover:border-slate-400 hover:bg-slate-50"
                       }`}
                     >
                       {category.name}
                     </button>
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex flex-wrap gap-1.5">
                       <button
                         onClick={() => reorderCategory(category, -1)}
                         disabled={busy || blocked || idx === 0}
-                        className="rounded border px-2 py-1 text-xs"
+                        aria-label={`Move category ${category.name} up`}
+                        title={`Move ${category.name} up`}
+                        className="rounded-md border border-slate-200 bg-white p-1.5 text-slate-600 hover:border-slate-400 hover:text-slate-900 disabled:opacity-40"
                       >
-                        Up
+                        <ChevronUpIcon />
                       </button>
                       <button
                         onClick={() => reorderCategory(category, 1)}
                         disabled={busy || blocked || idx === categories.length - 1}
-                        className="rounded border px-2 py-1 text-xs"
+                        aria-label={`Move category ${category.name} down`}
+                        title={`Move ${category.name} down`}
+                        className="rounded-md border border-slate-200 bg-white p-1.5 text-slate-600 hover:border-slate-400 hover:text-slate-900 disabled:opacity-40"
                       >
-                        Down
+                        <ChevronDownIcon />
                       </button>
                       <button
                         onClick={() => startCategoryEdit(category)}
                         disabled={busy || blocked}
-                        className="rounded border px-2 py-1 text-xs"
+                        aria-label={`Rename category ${category.name}`}
+                        title={`Rename ${category.name}`}
+                        className="rounded-md border border-slate-200 bg-white p-1.5 text-slate-600 hover:border-slate-400 hover:text-slate-900 disabled:opacity-40"
                       >
-                        Rename
+                        <PencilIcon />
                       </button>
                       <button
                         onClick={() => deleteCategory(category.id)}
                         disabled={busy || blocked}
-                        className="rounded border border-red-300 px-2 py-1 text-xs text-red-700"
+                        aria-label={`Delete category ${category.name}`}
+                        title={`Delete ${category.name}`}
+                        className="rounded-md border border-red-200 bg-white p-1.5 text-red-600 hover:border-red-400 hover:text-red-700 disabled:opacity-40"
                       >
-                        Delete
+                        <TrashIcon />
                       </button>
                     </div>
                   </div>
@@ -551,20 +693,35 @@ export default function DashboardMenuPage() {
           </div>
         </aside>
 
-        <section className="rounded-xl border bg-white p-4">
+        <section className="relative rounded-xl border bg-white p-4">
           <h2 className="text-lg font-semibold">Menu Items</h2>
           {blocked && (
             <p className="mt-2 rounded-md bg-amber-50 p-2 text-sm text-amber-800">
               Menu changes are disabled until your selected business is approved.
             </p>
           )}
-          <form onSubmit={createItem} className="mt-3 grid gap-2 md:grid-cols-4">
-            <input
-              value={itemName}
-              onChange={(e) => setItemName(e.target.value)}
-              placeholder="Item name"
-              className="rounded-md border px-3 py-2 text-sm"
-            />
+          {!hasCategories && !blocked && (
+            <p className="mt-2 rounded-md bg-blue-50 p-2 text-sm text-blue-800">
+              Add your first category to unlock menu item management.
+            </p>
+          )}
+          {!hasCategories && (
+            <div className="pointer-events-none absolute inset-0 z-10 rounded-xl border border-dashed border-gray-300 bg-white/45" />
+          )}
+          <div
+            className={`${
+              !hasCategories ? "pointer-events-none select-none blur-[2px] opacity-60" : ""
+            }`}
+          >
+            <form onSubmit={createItem} className="mt-3 grid gap-2 md:grid-cols-4">
+            <div>
+              <input
+                value={itemName}
+                onChange={(e) => setItemName(e.target.value)}
+                placeholder="Item name"
+                className="w-full rounded-md border px-3 py-2 text-sm"
+              />
+            </div>
             <input
               value={itemPrice}
               onChange={(e) => setItemPrice(e.target.value)}
@@ -585,24 +742,23 @@ export default function DashboardMenuPage() {
             </select>
             <button
               type="submit"
-              disabled={busy || blocked || categories.length === 0}
+              disabled={busy || blocked || !hasCategories}
               className="rounded-md bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
             >
               Add item
             </button>
-          </form>
-          {!itemSuggestionsLoading && !!itemSuggestions.length && (
-            <div className="mt-3">
-              <p className="text-xs font-medium text-gray-600">Suggested menu items</p>
-              <div className="mt-2 flex flex-wrap gap-2">
+            <div className="md:col-span-4">
+              <p className="text-[11px] font-medium text-gray-500">Suggestions</p>
+              <div className="mt-1.5 flex min-h-[30px] flex-wrap gap-1.5">
                 {itemSuggestions.map((suggestion) => (
                   <button
                     key={suggestion.label}
+                    type="button"
                     onClick={() => {
                       setItemName(suggestion.label);
                       setItemTags(suggestion.dietaryTags?.slice(0, 1) ?? []);
                     }}
-                    disabled={busy || blocked}
+                    disabled={busy || blocked || !hasCategories}
                     className="rounded-full border border-gray-300 px-2 py-1 text-xs"
                   >
                     {suggestion.label}
@@ -610,170 +766,273 @@ export default function DashboardMenuPage() {
                 ))}
               </div>
             </div>
-          )}
-
-          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-
-          <div className="mt-4 space-y-2">
-            {filteredItems.map((item, idx) => (
-              <div
-                key={item.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3"
+            <div className="relative md:col-span-4">
+              <textarea
+                value={itemDescription}
+                onChange={(e) => setItemDescription(e.target.value)}
+                placeholder="Item description"
+                className="w-full rounded-md border px-3 py-2 pr-11 text-sm"
+                rows={2}
+              />
+              <button
+                type="button"
+                onClick={handleGenerateCreateDescription}
+                aria-label="Generate description for new item"
+                title={generatingDescription ? "Generating description..." : "Generate description"}
+                disabled={
+                  busy ||
+                  blocked ||
+                  !hasCategories ||
+                  generatingDescription ||
+                  itemName.trim().length < 2
+                }
+                className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border border-indigo-200 bg-indigo-50 text-indigo-700 disabled:opacity-50"
               >
-                {editingItemId === item.id && itemEditDraft ? (
-                  <div className="grid w-full gap-2 md:grid-cols-5">
-                    <input
-                      value={itemEditDraft.name}
-                      onChange={(e) =>
-                        setItemEditDraft((prev) => (prev ? { ...prev, name: e.target.value } : prev))
-                      }
-                      className="rounded border px-2 py-1 text-sm"
-                    />
-                    <input
-                      value={itemEditDraft.price}
-                      onChange={(e) =>
-                        setItemEditDraft((prev) => (prev ? { ...prev, price: e.target.value } : prev))
-                      }
-                      className="rounded border px-2 py-1 text-sm"
-                    />
-                    <select
-                      value={itemEditDraft.categoryId}
-                      onChange={(e) =>
-                        setItemEditDraft((prev) =>
-                          prev ? { ...prev, categoryId: e.target.value } : prev
-                        )
-                      }
-                      className="rounded border px-2 py-1 text-sm"
-                    >
-                      {categories.map((category) => (
-                        <option key={category.id} value={category.id}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      value={itemEditDraft.dietaryTag}
-                      onChange={(e) =>
-                        setItemEditDraft((prev) =>
-                          prev ? { ...prev, dietaryTag: e.target.value } : prev
-                        )
-                      }
-                      className="rounded border px-2 py-1 text-sm"
-                    >
-                      <option value="">No dietary tag</option>
-                      {DIETARY_TAGS.map((tag) => (
-                        <option key={tag} value={tag}>
-                          {tag}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={saveItemEdit}
-                        disabled={busy || blocked}
-                        className="rounded border px-2 py-1 text-xs"
+                <SparkleIcon className={generatingDescription ? "h-4 w-4 animate-pulse" : "h-4 w-4"} />
+              </button>
+            </div>
+            </form>
+            <div className="mt-4 space-y-2">
+              {filteredItems.map((item, idx) => (
+                <div
+                  key={item.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                >
+                  {editingItemId === item.id && itemEditDraft ? (
+                      <div className="grid w-full gap-2 md:grid-cols-5">
+                      <input
+                        value={itemEditDraft.name}
+                        onChange={(e) =>
+                          setItemEditDraft((prev) => (prev ? { ...prev, name: e.target.value } : prev))
+                        }
+                        className="rounded border px-2 py-1 text-sm"
+                      />
+                      <input
+                        value={itemEditDraft.price}
+                        onChange={(e) =>
+                          setItemEditDraft((prev) => (prev ? { ...prev, price: e.target.value } : prev))
+                        }
+                        className="rounded border px-2 py-1 text-sm"
+                      />
+                      <select
+                        value={itemEditDraft.categoryId}
+                        onChange={(e) =>
+                          setItemEditDraft((prev) =>
+                            prev ? { ...prev, categoryId: e.target.value } : prev
+                          )
+                        }
+                        className="rounded border px-2 py-1 text-sm"
                       >
-                        Save
-                      </button>
-                      <button
-                        onClick={() => {
-                          setEditingItemId(null);
-                          setItemEditDraft(null);
-                        }}
-                        disabled={busy || blocked}
-                        className="rounded border px-2 py-1 text-xs"
+                        {categories.map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.name}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={itemEditDraft.dietaryTag}
+                        onChange={(e) =>
+                          setItemEditDraft((prev) =>
+                            prev ? { ...prev, dietaryTag: e.target.value } : prev
+                          )
+                        }
+                        className="rounded border px-2 py-1 text-sm"
                       >
-                        Cancel
-                      </button>
+                        <option value="">No dietary tag</option>
+                        {DIETARY_TAGS.map((tag) => (
+                          <option key={tag} value={tag}>
+                            {tag}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="relative md:col-span-4">
+                        <textarea
+                          value={itemEditDraft.description}
+                          onChange={(e) =>
+                            setItemEditDraft((prev) =>
+                              prev ? { ...prev, description: e.target.value } : prev
+                            )
+                          }
+                          className="w-full rounded border px-2 py-1 pr-10 text-sm"
+                          placeholder="Item description"
+                          rows={2}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleGenerateEditDescription}
+                          aria-label={`Generate description for ${itemEditDraft.name}`}
+                          title={
+                            generatingEditDescription
+                              ? "Generating description..."
+                              : `Generate description for ${itemEditDraft.name}`
+                          }
+                          disabled={busy || blocked || generatingEditDescription}
+                          className="absolute right-1.5 top-1.5 inline-flex h-7 w-7 items-center justify-center rounded border border-indigo-200 bg-indigo-50 text-indigo-700 disabled:opacity-50"
+                        >
+                          <SparkleIcon
+                            className={generatingEditDescription ? "h-3.5 w-3.5 animate-pulse" : "h-3.5 w-3.5"}
+                          />
+                        </button>
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={saveItemEdit}
+                          disabled={busy || blocked}
+                          className="rounded border px-2 py-1 text-xs"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingItemId(null);
+                            setItemEditDraft(null);
+                          }}
+                          disabled={busy || blocked}
+                          className="rounded border px-2 py-1 text-xs"
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <>
-                    <div>
-                      <p className="font-medium">{item.name}</p>
-                      <p className="text-sm text-gray-600">
-                        ${Number.parseFloat(item.price).toFixed(2)}
-                      </p>
-                      {!!item.dietaryTags.length && (
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {item.dietaryTags.map((tag) => (
-                            <span
-                              key={tag}
-                              className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-800"
+                  ) : (
+                    <>
+                      <div className="flex items-start gap-4">
+                        <div className="flex w-[88px] shrink-0 flex-col items-center gap-2">
+                          <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                            {item.imageUrl ? (
+                              <img
+                                src={item.imageUrl}
+                                alt={`${item.name} preview`}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <div className="flex flex-col items-center gap-1 text-slate-500">
+                                <ImageIcon className="h-5 w-5" />
+                                <span className="text-[10px] font-medium">No Image</span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex gap-1.5">
+                            <button
+                              onClick={() => handleUploadImage(item)}
+                              disabled={busy || blocked}
+                              aria-label={`Upload image for ${item.name}`}
+                              title={`Upload image for ${item.name}`}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:border-slate-400 disabled:opacity-40"
                             >
-                              {tag}
-                            </span>
-                          ))}
+                              <ImageIcon className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleGenerateAiImage(item)}
+                              disabled={busy || blocked}
+                              aria-label={`Generate AI image for ${item.name}`}
+                              title={`Generate AI image for ${item.name}`}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-indigo-200 bg-indigo-50 text-indigo-700 hover:border-indigo-400 disabled:opacity-40"
+                            >
+                              <SparkleIcon className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => reorderItem(item, -1)}
-                        disabled={busy || blocked || idx === 0}
-                        className="rounded border px-2 py-1 text-xs"
-                      >
-                        Up
-                      </button>
-                      <button
-                        onClick={() => reorderItem(item, 1)}
-                        disabled={busy || blocked || idx === filteredItems.length - 1}
-                        className="rounded border px-2 py-1 text-xs"
-                      >
-                        Down
-                      </button>
-                      <button
-                        onClick={() => startItemEdit(item)}
-                        disabled={busy || blocked}
-                        className="rounded border px-2 py-1 text-xs"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => deleteItem(item.id)}
-                        disabled={busy || blocked}
-                        className="rounded border border-red-300 px-2 py-1 text-xs text-red-700"
-                      >
-                        Delete
-                      </button>
-                      <button
-                        onClick={() => toggleAvailability(item)}
-                        disabled={busy || blocked}
-                        className={`rounded px-2 py-1 text-xs text-white ${
-                          item.isAvailable ? "bg-green-600" : "bg-gray-500"
-                        }`}
-                      >
-                        {item.isAvailable ? "Available" : "Unavailable"}
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            ))}
-            {!filteredItems.length && (
-              <p className="text-sm text-gray-600">No items in selected category.</p>
-            )}
-          </div>
+                        <div className="min-w-[170px]">
+                          <p className="font-medium">{item.name}</p>
+                          <p className="text-sm text-gray-600">
+                            ${Number.parseFloat(item.price).toFixed(2)}
+                          </p>
+                          {item.description && (
+                            <p className="mt-1 max-w-xl text-sm text-slate-500">{item.description}</p>
+                          )}
+                          {!!item.dietaryTags.length && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {item.dietaryTags.map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-800"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => reorderItem(item, -1)}
+                          disabled={busy || blocked || idx === 0}
+                          aria-label={`Move item ${item.name} up`}
+                          title={`Move ${item.name} up`}
+                          className="rounded-md border border-slate-200 bg-white p-1.5 text-slate-600 hover:border-slate-400 hover:text-slate-900 disabled:opacity-40"
+                        >
+                          <ChevronUpIcon />
+                        </button>
+                        <button
+                          onClick={() => reorderItem(item, 1)}
+                          disabled={busy || blocked || idx === filteredItems.length - 1}
+                          aria-label={`Move item ${item.name} down`}
+                          title={`Move ${item.name} down`}
+                          className="rounded-md border border-slate-200 bg-white p-1.5 text-slate-600 hover:border-slate-400 hover:text-slate-900 disabled:opacity-40"
+                        >
+                          <ChevronDownIcon />
+                        </button>
+                        <button
+                          onClick={() => startItemEdit(item)}
+                          disabled={busy || blocked}
+                          aria-label={`Edit item ${item.name}`}
+                          title={`Edit ${item.name}`}
+                          className="rounded-md border border-slate-200 bg-white p-1.5 text-slate-600 hover:border-slate-400 hover:text-slate-900 disabled:opacity-40"
+                        >
+                          <PencilIcon />
+                        </button>
+                        <button
+                          onClick={() => deleteItem(item.id)}
+                          disabled={busy || blocked}
+                          aria-label={`Delete item ${item.name}`}
+                          title={`Delete ${item.name}`}
+                          className="rounded-md border border-red-200 bg-white p-1.5 text-red-600 hover:border-red-400 hover:text-red-700 disabled:opacity-40"
+                        >
+                          <TrashIcon />
+                        </button>
+                        <button
+                          onClick={() => toggleAvailability(item)}
+                          disabled={busy || blocked}
+                          className={`rounded px-2 py-1 text-xs text-white ${
+                            item.isAvailable ? "bg-green-600" : "bg-gray-500"
+                          }`}
+                        >
+                          {item.isAvailable ? "Available" : "Unavailable"}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+              {!filteredItems.length && (
+                <p className="text-sm text-gray-600">
+                  {hasCategories ? "No items in selected category." : "No categories yet."}
+                </p>
+              )}
+            </div>
 
-          <div className="mt-4 flex items-center justify-between border-t pt-4">
-            <p className="text-xs text-gray-600">
-              Page {itemPage} of {totalPages} ({itemTotal} total items)
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => goToPage(itemPage - 1)}
-                disabled={busy || itemPage <= 1}
-                className="rounded border px-3 py-1 text-xs disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() => goToPage(itemPage + 1)}
-                disabled={busy || itemPage >= totalPages}
-                className="rounded border px-3 py-1 text-xs disabled:opacity-50"
-              >
-                Next
-              </button>
+            <div className="mt-4 flex items-center justify-between border-t pt-4">
+              <p className="text-xs text-gray-600">
+                Page {itemPage} of {totalPages} ({itemTotal} total items)
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => goToPage(itemPage - 1)}
+                  disabled={busy || itemPage <= 1}
+                  className="rounded border px-3 py-1 text-xs disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => goToPage(itemPage + 1)}
+                  disabled={busy || itemPage >= totalPages}
+                  className="rounded border px-3 py-1 text-xs disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           </div>
         </section>

@@ -14,6 +14,13 @@ type RequestPayload = {
   limit: number;
 };
 
+type DescriptionPayload = {
+  categoryName: string;
+  itemName: string;
+  dietaryTags?: string[];
+  tone?: "neutral" | "premium" | "casual";
+};
+
 type RawSuggestion = {
   label?: unknown;
   confidence?: unknown;
@@ -78,42 +85,13 @@ class LlmClient {
     const startedAt = Date.now();
 
     try {
-      const response = await fetch(`${this.baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: model.model,
-          temperature: 0.2,
-          response_format: { type: "json_object" },
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are a menu assistant. Return JSON only: {\"suggestions\":[{\"label\":\"string\",\"confidence\":0.0,\"dietaryTags\":[\"vegetarian\"]}]}.",
-            },
-            { role: "user", content: prompt },
-          ],
-        }),
-        signal: controller.signal,
+      const content = await this.requestJsonCompletion({
+        model: model.model,
+        prompt,
+        system:
+          "You are a menu assistant. Return JSON only: {\"suggestions\":[{\"label\":\"string\",\"confidence\":0.0,\"dietaryTags\":[\"vegetarian\"]}]}.",
+        controller,
       });
-
-      if (!response.ok) {
-        const errorBody = await response.text();
-        logger.warn("ai.model.http_error", {
-          statusCode: response.status,
-          model: model.model,
-          body: errorBody.slice(0, 300),
-        });
-        return null;
-      }
-
-      const body = (await response.json()) as {
-        choices?: Array<{ message?: { content?: string | null } }>;
-      };
-      const content = body.choices?.[0]?.message?.content;
       if (!content) return null;
       const parsed = JSON.parse(content) as { suggestions?: RawSuggestion[] };
       const normalized = this.normalizeSuggestions(parsed.suggestions ?? [], payload.limit);
@@ -147,6 +125,58 @@ class LlmClient {
     }
   }
 
+  async generateItemDescription(payload: DescriptionPayload): Promise<string | null> {
+    if (!this.apiKey) {
+      logger.warn("ai.model.unavailable.missing_api_key");
+      return null;
+    }
+
+    const model = this.getModelHandle();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    const startedAt = Date.now();
+
+    try {
+      const content = await this.requestJsonCompletion({
+        model: model.model,
+        prompt: this.buildDescriptionPrompt(payload),
+        system:
+          "You are a menu copy assistant. Return JSON only: {\"description\":\"string\"}. Keep it concise and appetizing.",
+        controller,
+      });
+      if (!content) return null;
+      const parsed = JSON.parse(content) as { description?: unknown };
+      const description =
+        typeof parsed.description === "string" ? parsed.description.trim() : "";
+      if (!description) return null;
+      const normalized = description.slice(0, 300);
+      logger.info("ai.model.description.success", {
+        model: model.model,
+        durationMs: Date.now() - startedAt,
+      });
+      return normalized;
+    } catch (error) {
+      const durationMs = Date.now() - startedAt;
+      if (this.isAbortError(error)) {
+        logger.info("ai.model.description.timeout", {
+          model: model.model,
+          durationMs,
+          timeoutMs: this.timeoutMs,
+        });
+        return null;
+      }
+      logger.warn("ai.model.description.failed", {
+        model: model.model,
+        durationMs,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   private isAbortError(error: unknown): boolean {
     return error instanceof Error && error.name === "AbortError";
   }
@@ -165,6 +195,63 @@ class LlmClient {
       "If no existing context, return common items for the category.",
       `Dietary tags must be from: ${DIETARY_TAGS.join(", ")}.`,
     ].join("\n");
+  }
+
+  private buildDescriptionPrompt(payload: DescriptionPayload): string {
+    const tags = payload.dietaryTags?.length ? payload.dietaryTags.join(", ") : "none";
+    return [
+      `Category: ${payload.categoryName}`,
+      `Item: ${payload.itemName}`,
+      `Dietary tags: ${tags}`,
+      `Tone: ${payload.tone || "neutral"}`,
+      "Write a concise menu description in 1-2 short sentences.",
+      "Do not include price. Do not use markdown.",
+    ].join("\n");
+  }
+
+  private async requestJsonCompletion({
+    model,
+    prompt,
+    system,
+    controller,
+  }: {
+    model: string;
+    prompt: string;
+    system: string;
+    controller: AbortController;
+  }): Promise<string | null> {
+    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: prompt },
+        ],
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      logger.warn("ai.model.http_error", {
+        statusCode: response.status,
+        model,
+        body: errorBody.slice(0, 300),
+      });
+      return null;
+    }
+
+    const body = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string | null } }>;
+    };
+    return body.choices?.[0]?.message?.content || null;
   }
 
   private normalizeSuggestions(

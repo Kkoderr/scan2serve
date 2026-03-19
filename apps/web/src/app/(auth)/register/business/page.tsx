@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../../../lib/auth-context";
+import { showToast } from "../../../../lib/toast";
 
 const getPasswordChecks = (value: string) => ({
   minLength: value.length >= 8,
@@ -27,6 +28,16 @@ export default function BusinessRegisterPage() {
     checks.hasLower &&
     checks.hasNumber &&
     checks.hasSymbol;
+
+  useEffect(() => {
+    if (!localError) return;
+    showToast({ variant: "error", message: localError });
+  }, [localError]);
+
+  useEffect(() => {
+    if (!error) return;
+    showToast({ variant: "error", message: error });
+  }, [error]);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -106,8 +117,6 @@ export default function BusinessRegisterPage() {
               className="mt-1 w-full rounded-md border px-3 py-2"
             />
           </div>
-          {localError && <p className="text-sm text-red-600">{localError}</p>}
-          {error && <p className="text-sm text-red-600">{error}</p>}
           <button
             type="submit"
             disabled={loading || !isStrong}

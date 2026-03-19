@@ -194,7 +194,7 @@ describe("DashboardMenuPage", () => {
       expect(screen.getByText("Burger")).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByText("Edit"));
+    fireEvent.click(screen.getByLabelText("Edit item Burger"));
     fireEvent.change(screen.getByDisplayValue("Burger"), { target: { value: "Burger XL" } });
     fireEvent.change(screen.getByDisplayValue("12.50"), { target: { value: "14.50" } });
     fireEvent.click(screen.getByText("Save"));
@@ -206,7 +206,7 @@ describe("DashboardMenuPage", () => {
       );
     });
 
-    fireEvent.click(screen.getAllByText("Delete")[1]);
+    fireEvent.click(screen.getByLabelText("Delete item Burger XL"));
 
     await waitFor(() => {
       expect(apiFetchMock).toHaveBeenCalledWith(
@@ -227,6 +227,35 @@ describe("DashboardMenuPage", () => {
 
     expect(apiFetchMock).not.toHaveBeenCalled();
     expect(screen.getByText("Add item")).toHaveProperty("disabled", true);
+  });
+
+  it("locks menu items until first category is created and hides all-categories button", async () => {
+    useAuthMock.mockReturnValue({
+      user: { id: "u1", email: "biz@example.com", role: "business" },
+      loading: false,
+      selectedBusiness: { id: "b1", status: "approved" },
+    });
+
+    apiFetchMock.mockImplementation((path: string) => {
+      if (path === "/api/business/categories") {
+        return Promise.resolve({ categories: [] });
+      }
+      if (path === "/api/business/menu-items?page=1&limit=10") {
+        return Promise.resolve({ items: [], total: 0, page: 1, limit: 10 });
+      }
+      if (path === "/api/business/menu-suggestions/categories") {
+        return Promise.resolve({ suggestions: [] });
+      }
+      return Promise.resolve({});
+    });
+
+    render(<DashboardMenuPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Add your first category to unlock menu item management.")).toBeTruthy();
+      expect(screen.queryByText("All categories")).toBeNull();
+      expect(screen.getByText("Add item")).toHaveProperty("disabled", true);
+    });
   });
 
   it("shows dietary tags and suggestion click prefills item + tag", async () => {
@@ -279,6 +308,11 @@ describe("DashboardMenuPage", () => {
     await waitFor(() => {
       expect(screen.getAllByText("vegetarian").length).toBeGreaterThan(0);
       expect(screen.getByText("Lemon Iced Tea")).toBeTruthy();
+      expect(screen.getByText("No Image")).toBeTruthy();
+      expect(screen.getByLabelText("Upload image for Smoothie")).toBeTruthy();
+      expect(screen.getByLabelText("Generate AI image for Smoothie")).toBeTruthy();
+      expect(screen.queryByText("Upload")).toBeNull();
+      expect(screen.queryByText("Generate AI")).toBeNull();
     });
 
     fireEvent.click(screen.getByText("Lemon Iced Tea"));
@@ -286,6 +320,107 @@ describe("DashboardMenuPage", () => {
     await waitFor(() => {
       expect(screen.getByDisplayValue("Lemon Iced Tea")).toBeTruthy();
       expect(screen.getByDisplayValue("vegan")).toBeTruthy();
+    });
+  });
+
+  it("shows preview image when menu item has imageUrl", async () => {
+    useAuthMock.mockReturnValue({
+      user: { id: "u1", email: "biz@example.com", role: "business" },
+      loading: false,
+      selectedBusiness: { id: "b1", status: "approved" },
+    });
+
+    apiFetchMock.mockImplementation((path: string) => {
+      if (path === "/api/business/categories") {
+        return Promise.resolve({
+          categories: [{ id: "c1", businessId: "b1", name: "Desserts", sortOrder: 0 }],
+        });
+      }
+      if (path === "/api/business/menu-items?page=1&limit=10") {
+        return Promise.resolve({
+          items: [
+            {
+              id: "i1",
+              businessId: "b1",
+              categoryId: "c1",
+              name: "Brownie",
+              description: null,
+              price: "8.00",
+              imageUrl: "https://example.com/brownie.jpg",
+              dietaryTags: ["vegetarian"],
+              isAvailable: true,
+              sortOrder: 0,
+            },
+          ],
+          total: 1,
+          page: 1,
+          limit: 10,
+        });
+      }
+      if (path === "/api/business/menu-suggestions/categories") {
+        return Promise.resolve({ suggestions: [] });
+      }
+      if (path.startsWith("/api/ai/menu/item-suggestions")) {
+        return Promise.resolve({ suggestions: [] });
+      }
+      return Promise.resolve({});
+    });
+
+    render(<DashboardMenuPage />);
+
+    await waitFor(() => {
+      expect(screen.getByAltText("Brownie preview")).toBeTruthy();
+      expect(screen.queryByText("No Image")).toBeNull();
+    });
+  });
+
+  it("generates description for create form using ai endpoint", async () => {
+    useAuthMock.mockReturnValue({
+      user: { id: "u1", email: "biz@example.com", role: "business" },
+      loading: false,
+      selectedBusiness: { id: "b1", status: "approved" },
+    });
+
+    apiFetchMock.mockImplementation((path: string, options?: { method?: string }) => {
+      if (path === "/api/business/categories") {
+        return Promise.resolve({
+          categories: [{ id: "c1", businessId: "b1", name: "Main", sortOrder: 0 }],
+        });
+      }
+      if (path === "/api/business/menu-items?page=1&limit=10") {
+        return Promise.resolve({ items: [], total: 0, page: 1, limit: 10 });
+      }
+      if (path === "/api/business/menu-suggestions/categories") {
+        return Promise.resolve({ suggestions: [] });
+      }
+      if (path.startsWith("/api/ai/menu/item-suggestions")) {
+        return Promise.resolve({ suggestions: [] });
+      }
+      if (path === "/api/ai/menu/item-description" && options?.method === "POST") {
+        return Promise.resolve({
+          description: "Tender grilled chicken marinated with house spices.",
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    render(<DashboardMenuPage />);
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("Item name")).toBeTruthy();
+    });
+
+    fireEvent.change(screen.getByPlaceholderText("Item name"), {
+      target: { value: "Grilled Chicken" },
+    });
+    fireEvent.click(screen.getByLabelText("Generate description for new item"));
+
+    await waitFor(() => {
+      expect(apiFetchMock).toHaveBeenCalledWith(
+        "/api/ai/menu/item-description",
+        expect.objectContaining({ method: "POST" })
+      );
+      expect(screen.getByDisplayValue("Tender grilled chicken marinated with house spices.")).toBeTruthy();
     });
   });
 

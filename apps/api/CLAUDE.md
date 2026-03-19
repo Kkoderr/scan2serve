@@ -21,6 +21,7 @@ pnpm db:studio    # open Prisma Studio GUI
 - Business logic lives in `src/services/`, routes are thin controllers
 - Validation uses Zod schemas
 - Auth middleware in `src/middleware/` — `requireAuth` and `requireRole(role)`
+- API error/success payloads should be structured for toast consumption in frontend; do not design endpoint contracts around inline page text rendering.
 
 ## Database
 - Prisma ORM, schema at `prisma/schema.prisma`
@@ -96,3 +97,7 @@ pnpm db:studio    # open Prisma Studio GUI
 - Suggestion continuity fix: `src/services/llmMenuSuggestions.ts` now requests a wider LLM candidate set (`limit * 6`, capped at 50) and trims after filtering/deduping, preventing repeated top-5 exhaustion.
 - Deterministic fallback now backfills from a global deduped item pool when category-scoped list is exhausted (`src/services/menuSuggestions.ts`), so suggestions continue even after many existing items.
 - Added service-level orchestration tests in `tests/llmMenuSuggestions.service.test.ts` for wide-candidate fetch behavior and fallback fill correctness.
+- ADR-013 implementation: added `POST /api/ai/menu/item-description` in `src/routes/ai.ts` for AI-generated menu item descriptions with business/category scoping.
+- Extended singleton LLM client in `src/services/llmClient.ts` with description generation support (`generateItemDescription`) while preserving timeout/error handling conventions.
+- Added deterministic description fallback in AI route when LLM output is unavailable and added endpoint tests in `tests/aiRoutes.test.ts`.
+- UX messaging policy alignment: backend responses should continue to provide concise, user-safe messages intended for toast notifications in web UI.

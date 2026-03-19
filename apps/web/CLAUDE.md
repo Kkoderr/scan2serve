@@ -26,6 +26,7 @@ pnpm lint   # run Next.js ESLint
 - UI components use shadcn/ui (in `src/components/ui/`)
 - Tailwind CSS for styling — mobile-first approach
 - Feature-specific components in `src/components/{feature}/`
+- User-facing success/error/info feedback must use toast notifications, not inline text messages/banners in page content.
 
 ## Environment
 - Copy `.env.example` to `.env.local`
@@ -76,3 +77,24 @@ pnpm lint   # run Next.js ESLint
 - Switched dashboard item suggestions to dedicated AI endpoint `GET /api/ai/menu/item-suggestions` with `businessId`, `categoryId`, `q`, and `limit` query parameters.
 - Added debounced typed-query suggestion fetch in `src/app/dashboard/menu/page.tsx`; old suggestion chips are cleared while request is in-flight so stale suggestions are not shown during search.
 - Category change now triggers immediate re-fetch of item suggestions for the newly selected category; added regression coverage in `tests/menu-page.test.tsx`.
+- Removed unnecessary `All categories` control from dashboard menu category rail and made category selection explicit.
+- Menu items section now remains visually blurred/locked until at least one category exists, with helper copy guiding first-time setup (`Add your first category to unlock menu item management.`).
+- Added web regression test in `tests/menu-page.test.tsx` for locked-no-category state and absence of the `All categories` button.
+- UI polish pass: category and item action controls (move/edit/delete) in dashboard menu now use icon-only buttons with accessible `aria-label`/`title` attributes instead of text labels.
+- Redesigned category and menu item cards with softer borders, subtle gradients, and improved spacing for cleaner visual hierarchy.
+- Updated menu interaction tests to target accessible icon-button labels (e.g., `Edit item ...`, `Delete item ...`).
+- ADR-012 implementation: refreshed category cards with color-accented gradient themes per card for stronger visual distinction and cleaner selection contrast.
+- Added per-item image blocks in menu cards: render image preview when `imageUrl` exists, otherwise show explicit placeholder (`No Image`).
+- Added UI entry-point actions on each item card: `Upload` and `Generate AI` image controls (currently UI-only hooks), with test coverage for placeholder/preview and control presence.
+- Category visual refinement follow-up: softened category card styling away from heavy gradients to cleaner white cards with colored left accents and subtler selected-state treatment.
+- Item image action placement follow-up: moved `Upload` and `Generate AI` controls directly beneath the image placeholder/preview and converted both to icon-only buttons (accessible via labels/tooltips).
+- ADR-013 implementation: create-item form now includes manual description input plus `Generate Description` action using `/api/ai/menu/item-description`.
+- Item edit mode now includes editable description textarea and AI-assisted description generation action; item cards display description text when present.
+- Added web test coverage in `tests/menu-page.test.tsx` for AI description generation and form autofill behavior.
+- Description UX refinement: moved generate-description controls into description textareas as icon-only inline actions (create + edit) using accessible labels/tooltips.
+- Layout refinement: added faded gradient section grouping in category panel and subtle gradient divider lines across menu panel subsections for clearer visual separation.
+- Suggestion UX refinement: category and menu-item suggestions now render as input-attached dropdown chip panels directly beneath their respective inputs (instead of detached suggestion sections).
+- Suggestion UX follow-up: removed dropdown/overlay behavior and kept suggestion chips inline in the same input blocks for both category-create and item-name fields.
+- Visual rollback follow-up: removed category faded-gradient grouping and menu-section gradient divider lines from `src/app/dashboard/menu/page.tsx`, returning those regions to neutral bordered surfaces.
+- Toast system implementation: added global toast utility (`src/lib/toast.ts`) and viewport (`src/components/ui/toast-viewport.tsx`) mounted in `src/app/layout.tsx`; converted inline auth/admin/onboarding/menu error feedback to toasts and removed inline error text rendering for those flows.
+- UX messaging policy: use toasts for all user notifications/errors; avoid inline red/green page text messages for action feedback.

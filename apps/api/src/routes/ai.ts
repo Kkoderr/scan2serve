@@ -6,6 +6,7 @@ import { sendError, sendSuccess } from "../utils/response";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { requireApprovedBusiness } from "../middleware/businessApproval";
 import { getMenuItemSuggestions } from "../services/llmMenuSuggestions";
+import { getLlmClient } from "../services/llmClient";
 
 const router: express.Router = express.Router();
 
@@ -15,6 +16,30 @@ const itemSuggestionsQuerySchema = z.object({
   q: z.string().max(120).optional(),
   limit: z.coerce.number().int().min(1).max(10).optional(),
 });
+
+const itemDescriptionBodySchema = z.object({
+  businessId: z.string().min(1),
+  categoryId: z.string().min(1),
+  itemName: z.string().min(2).max(120),
+  dietaryTags: z.array(z.string()).optional(),
+  tone: z.enum(["neutral", "premium", "casual"]).optional(),
+});
+
+const buildFallbackDescription = ({
+  itemName,
+  categoryName,
+  dietaryTags,
+}: {
+  itemName: string;
+  categoryName: string;
+  dietaryTags: string[];
+}) => {
+  const tagLine = dietaryTags.length > 0 ? ` ${dietaryTags.join(", ")} friendly.` : "";
+  return `${itemName} from our ${categoryName} selection, crafted for balanced flavor and freshness.${tagLine}`.slice(
+    0,
+    300
+  );
+};
 
 router.use(requireAuth, requireRole("business"));
 
@@ -55,6 +80,50 @@ router.get(
     });
 
     sendSuccess(res, { suggestions });
+  })
+);
+
+router.post(
+  "/menu/item-description",
+  requireApprovedBusiness,
+  asyncHandler(async (req, res) => {
+    const parsed = itemDescriptionBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(res, parsed.error.message, 400, "VALIDATION_ERROR");
+      return;
+    }
+
+    if (req.business!.id !== parsed.data.businessId) {
+      sendError(res, "Business mismatch in request", 403, "BUSINESS_SCOPE_MISMATCH");
+      return;
+    }
+
+    const category = await prisma.category.findFirst({
+      where: { id: parsed.data.categoryId, businessId: req.business!.id },
+      select: { id: true, name: true },
+    });
+    if (!category) {
+      sendError(res, "Category not found", 404, "CATEGORY_NOT_FOUND");
+      return;
+    }
+
+    const llm = getLlmClient();
+    const description = await llm.generateItemDescription({
+      categoryName: category.name,
+      itemName: parsed.data.itemName,
+      dietaryTags: parsed.data.dietaryTags ?? [],
+      tone: parsed.data.tone,
+    });
+
+    sendSuccess(res, {
+      description:
+        description ??
+        buildFallbackDescription({
+          itemName: parsed.data.itemName,
+          categoryName: category.name,
+          dietaryTags: parsed.data.dietaryTags ?? [],
+        }),
+    });
   })
 );
 

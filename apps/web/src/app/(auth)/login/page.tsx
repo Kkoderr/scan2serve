@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../../lib/auth-context";
+import { showToast } from "../../../lib/toast";
 
 export default function LoginPage() {
   const { login, error } = useAuth();
@@ -10,6 +11,11 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!error) return;
+    showToast({ variant: "error", message: error });
+  }, [error]);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -59,7 +65,6 @@ export default function LoginPage() {
               className="mt-1 w-full rounded-md border px-3 py-2"
             />
           </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
           <button
             type="submit"
             disabled={loading}

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { BusinessProfile } from "@scan2serve/shared";
 import { useAuth } from "../../lib/auth-context";
 import { apiFetch } from "../../lib/api";
+import { showToast } from "../../lib/toast";
 
 type AdminBusiness = BusinessProfile & {
   rejections?: { id: string; reason: string | null; createdAt: string }[];
@@ -30,6 +31,11 @@ export default function AdminPage() {
       router.push("/dashboard");
     }
   }, [loading, user, router]);
+
+  useEffect(() => {
+    if (!error) return;
+    showToast({ variant: "error", message: error });
+  }, [error]);
 
   const fetchBusinesses = async (filter: typeof statusFilter) => {
     setFetching(true);
@@ -71,12 +77,14 @@ export default function AdminPage() {
           method: "PATCH",
           body: JSON.stringify({}),
         });
+        showToast({ variant: "success", message: "Business approved." });
       } else {
         const reason = window.prompt("Optional rejection reason:") ?? "";
         await apiFetch(`/api/admin/businesses/${businessId}/reject`, {
           method: "PATCH",
           body: JSON.stringify({ reason: reason.trim() || null }),
         });
+        showToast({ variant: "success", message: "Business rejected." });
       }
       await fetchBusinesses(statusFilter);
     } catch (err) {
@@ -126,8 +134,6 @@ export default function AdminPage() {
               </button>
             ))}
           </div>
-
-          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
           {fetching ? (
             <p className="mt-4 text-sm text-gray-600">Loading businesses...</p>

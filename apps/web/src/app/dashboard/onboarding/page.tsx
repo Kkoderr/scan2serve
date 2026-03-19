@@ -3,6 +3,7 @@
 import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "../../../lib/auth-context";
+import { showToast } from "../../../lib/toast";
 
 type FormState = {
   name: string;
@@ -75,6 +76,11 @@ function BusinessOnboardingPageContent() {
     });
   }, [existing]);
 
+  useEffect(() => {
+    if (!error) return;
+    showToast({ variant: "error", message: error });
+  }, [error]);
+
   if (loading || !user || user.role !== "business") {
     return (
       <main className="min-h-screen flex items-center justify-center">
@@ -100,8 +106,10 @@ function BusinessOnboardingPageContent() {
 
       if (existing) {
         await updateBusinessProfile({ businessId: existing.id, ...payload });
+        showToast({ variant: "success", message: "Business profile updated." });
       } else {
         await createBusinessProfile(payload);
+        showToast({ variant: "success", message: "Business profile created." });
       }
 
       router.push("/dashboard");
@@ -216,8 +224,6 @@ function BusinessOnboardingPageContent() {
               placeholder="https://..."
             />
           </label>
-
-          {error && <p className="text-sm text-red-600">{error}</p>}
 
           <div className="mt-2 flex gap-3">
             <button

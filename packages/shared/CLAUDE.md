@@ -12,6 +12,7 @@ import { UserRole, OrderStatus, ORDER_STATUS_FLOW } from "@scan2serve/shared";
 - TypeScript type definitions shared between frontend and backend
 - Enums and constants (order status flow, dietary tags, etc.)
 - Validation schemas (if using Zod, shared validators can live here)
+- Shared API feedback message contracts should remain concise and suitable for toast presentation in frontend.
 
 ## What does NOT belong here
 - React components (frontend only)
@@ -23,3 +24,4 @@ import { UserRole, OrderStatus, ORDER_STATUS_FLOW } from "@scan2serve/shared";
 - Extended shared business types to include `updatedAt` and `BusinessRejection[]` on `BusinessProfile`.
 - Extended auth request payload types with optional `qrToken` on login/register to support ADR-006 shared-endpoint QR customer auth context.
 - Updated `MenuItem.price` shared type to `string` to align with Layer 4 decimal-string API contract.
+- UX messaging policy alignment: shared response/message shapes are intended for toast-based notifications in UI, not inline page text alerts.

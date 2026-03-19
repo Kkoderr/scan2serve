@@ -20,6 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Explain Decisions:** When building features or making structural choices, explain the reasoning, technical cost, and technical debt trade-offs.
 - **Update STATUS.md:** At the end of every work session, update `STATUS.md` with current state, next steps, and any ADRs made.
 - **Local CLAUDE.md:** Create a CLAUDE.md in each major feature folder for local context.
+- **UX Messaging Rule:** User notifications/errors must be shown as toast notifications, not persistent inline page text banners/messages.
 
 ## Project Overview
 
@@ -347,3 +348,7 @@ Build features in this order. Each layer depends on the layers above it.
 - LLM timeout behavior is intentionally graceful: aborted calls should log as timeout metadata and continue via deterministic fallback (avoid noisy error-stack logs for expected timeout fallbacks).
 - AI suggestion quality guard: generate a wider LLM candidate pool and trim after exclusion/ranking to avoid repeated top-5-only outputs drying up as menus grow.
 - Dashboard UX guard: when fetching typed-query suggestions, clear stale chips during the request; category switches must trigger category-specific suggestion refresh.
+- Dashboard menu visual polish: replace text-heavy action controls with icon-only accessible buttons and keep card styling intentionally structured (not utility-default UI).
+- ADR-012 accepted and applied as UI-first scope: category cards use explicit color accents, and each menu item now exposes image placeholder/preview plus `Upload` and `Generate AI` entry points (without backend persistence yet).
+- ADR-013 accepted and implemented: menu item descriptions are now authorable in dashboard (manual + AI-generated via `/api/ai/menu/item-description`) with deterministic fallback on AI failures.
+- UX policy update: all user-facing notifications/errors should be delivered as toasts (not inline text messages on pages/components).
