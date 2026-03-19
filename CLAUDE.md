@@ -298,3 +298,20 @@ Build features in this order. Each layer depends on the layers above it.
 - **Admin-approved onboarding** — businesses register → pending → admin approves before they can create menus.
 - **English only, single currency** for MVP.
 - **Mobile-first** public menu — most customers scan QR from phones.
+
+## Updates 2026-03-19
+- Added `skills/claude-context-programmer` and enabled UI metadata; auth phase ADR approved (refresh tokens + httpOnly cookies + status field responses).
+- Testing mandate: Every new feature or app change must include/extend unit tests and integration/e2e coverage to verify flows work end-to-end.
+- Future work logging: Any deferred/next-step items (e.g., CI, perf) must be explicitly noted in relevant CLAUDE.md sections so they aren’t missed later.
+- TODO: Add GitHub Actions to run backend/frontend test suites with coverage gates once repo is ready for CI.
+- Note: API route-level tests are present but skipped in this sandbox (Express router mock hangs without sockets). Re-enable or adapt when running in a permissive env.
+- STATUS alignment completed: Layer 2 marked done, Layer 3 set as next, and ADR-004 drafted for business onboarding/approval flow pending acceptance.
+- ADR-004 regenerated with implementation-ready detail (endpoint contracts, approval gating behavior, alternatives) for user review before Layer 3 coding.
+- ADR-004 updated with an explicit ambiguity-resolution checklist (10 open questions) that must be answered in the ADR before acceptance and coding.
+- API auth route-level tests were adapted to run in this sandbox without opening sockets; `apps/api` tests now pass fully (6/6) with no static skips.
+- ADR-004 now contains resolved answers for all 10 open questions, including explicit defaults for admin listing, middleware failure contract, dashboard lock UX, login-time status refresh strategy, and a multi-business-per-user direction.
+- ADR-004 has been accepted and Layer 3 implementation has started: business/admin onboarding routes, approval-gate middleware, dashboard onboarding/status UX, and new API/web tests.
+- Docker compose runbook note: current `docker-compose up --build` is blocked by non-TTY `pnpm install` behavior unless `CI=true` is set in service env; after that, web service command still fails due incorrect `next dev` argument forwarding in compose command.
+- Docker compose stabilization completed: removed obsolete compose `version`, added service healthchecks/depends_on conditions, added container-safe pnpm env (`CI=true`), fixed web startup command, and verified `db`/`api`/`web` boot from clean `down -v && up --build`.
+- Stabilization follow-up completed: added Prisma migration baseline, resolved remaining API/web build blockers, and verified both app test suites + build pipelines pass.
+- Compose healthcheck fix: use `127.0.0.1` (not `localhost`) for API/web probes to avoid IPv6 loopback false negatives; `docker-compose ps` now reports all services healthy.

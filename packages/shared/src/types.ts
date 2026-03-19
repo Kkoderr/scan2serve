@@ -16,10 +16,15 @@ export type PaymentStatus = "pending" | "paid" | "failed" | "refunded";
 
 // ─── API Response Shapes ────────────────────────────────────
 
+export interface ApiError {
+  code?: string;
+  message: string;
+}
+
 export interface ApiResponse<T = unknown> {
-  success: boolean;
+  status: 1 | 0;
   data?: T;
-  error?: string;
+  error?: ApiError;
 }
 
 export interface PaginatedResponse<T> extends ApiResponse<T[]> {
@@ -41,6 +46,13 @@ export interface RegisterRequest {
   role: "customer" | "business";
 }
 
+export interface UserProfile {
+  id: string;
+  email: string;
+  role: UserRole;
+  createdAt: string;
+}
+
 export interface AuthTokenPayload {
   userId: string;
   email: string;
@@ -59,6 +71,14 @@ export interface BusinessProfile {
   address: string;
   phone: string;
   status: BusinessStatus;
+  createdAt: string;
+  updatedAt: string;
+  rejections?: BusinessRejection[];
+}
+
+export interface BusinessRejection {
+  id: string;
+  reason: string | null;
   createdAt: string;
 }
 

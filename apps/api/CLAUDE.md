@@ -30,3 +30,20 @@ pnpm db:studio    # open Prisma Studio GUI
 ## Environment
 - Copy `.env.example` to `.env` and fill in values
 - `DATABASE_URL` must point to a running PostgreSQL instance
+
+## Updates 2026-03-19
+- Implemented auth foundations: refresh-token cookies, `requireAuth/requireRole` middleware, auth routes, response helpers with `status` 1/0, and Prisma `refresh_tokens` table.
+- Added `.env.example` with JWT/cookie/TTL settings; added cookie-parser dependency.
+- Added Vitest setup; auth unit tests pass. Route-level tests are present but skipped in sandbox (Express router mock hangs without sockets); run or adapt in a permissive env.
+- Reworked `tests/authRoutes.test.ts` to remove `describe.skip` and run in sandbox without sockets by invoking route handlers directly from `authRouter.stack` with `node-mocks-http`.
+- API test suite now runs fully in this environment (`authService` + `authRoutes`, 6/6 passing).
+- Added Layer 3 backend routes: `src/routes/business.ts` (profile create/list/get/update + gated ops probe) and `src/routes/admin.ts` (business list/approve/reject).
+- Added business approval middleware in `src/middleware/businessApproval.ts` with ADR error codes: `BUSINESS_PROFILE_REQUIRED`, `BUSINESS_PENDING_APPROVAL`, `BUSINESS_REJECTED`.
+- Updated Prisma schema for multi-business support and rejection history (`BusinessRejection` model; removed unique user-to-business constraint).
+- Added `tests/onboardingRoutes.test.ts` to validate onboarding lifecycle, admin moderation transitions, and route gating states.
+- Docker compose diagnostics: `docker-compose up --build` currently fails in non-interactive containers because `pnpm install` aborts with `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` unless `CI=true` is passed into the container environment.
+- Verified API container path with `CI=true`: install + `prisma db push` + API dev boot succeeds (`[api] Server running on http://localhost:4000`).
+- Compose fix applied in `docker-compose.yml`: added `CI=true` + `PNPM_CONFIG_CONFIRM_MODULES_PURGE=false` for service startup; API now cleanly reaches healthy state in full compose boot.
+- Added migration baseline files for current schema (`prisma/migrations/20260319190000_init/migration.sql`, `prisma/migration_lock.toml`) and regenerated Prisma client.
+- Fixed API build typing blockers (`src/utils/asyncHandler.ts`, `src/index.ts`, `src/routes/auth.ts`, `src/prisma.ts`) so `pnpm --filter @scan2serve/api build` now succeeds.
+- Compose healthcheck probe updated to `http://127.0.0.1:4000/api/health` to avoid IPv6 localhost false negatives.

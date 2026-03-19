@@ -23,7 +23,8 @@ model User {
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  business Business?
+  businesses    Business[]
+  refreshTokens RefreshToken[]
 
   @@map("users")
 }
@@ -38,7 +39,7 @@ enum BusinessStatus {
 
 model Business {
   id          String         @id @default(cuid())
-  userId      String         @unique @map("user_id")
+  userId      String         @map("user_id")
   name        String
   slug        String         @unique
   description String?
@@ -55,8 +56,21 @@ model Business {
   tables     Table[]
   qrCodes    QrCode[]
   orders     Order[]
+  rejections BusinessRejection[]
 
   @@map("businesses")
+}
+
+model BusinessRejection {
+  id         String   @id @default(cuid())
+  businessId String   @map("business_id")
+  reason     String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, createdAt])
+  @@map("business_rejections")
 }
 
 // ─── Menu ───────────────────────────────────────────────────
@@ -180,4 +194,21 @@ model OrderItem {
   menuItem MenuItem @relation(fields: [menuItemId], references: [id])
 
   @@map("order_items")
+}
+
+// ─── Auth Refresh Tokens ─────────────────────────────────────
+
+model RefreshToken {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  tokenHash  String   @map("token_hash")
+  expiresAt  DateTime @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@unique([tokenHash])
+  @@map("refresh_tokens")
 }

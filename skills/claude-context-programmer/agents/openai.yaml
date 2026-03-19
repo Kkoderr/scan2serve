@@ -1,0 +1,4 @@
+interface:
+  display_name: "CLAUDE Context Programmer"
+  short_description: "Preload STATUS/CLAUDE rules before coding and log updates"
+  default_prompt: "Use $claude-context-programmer to load STATUS + relevant CLAUDE.md files, obey ADR-first, and append dated notes back to those files."

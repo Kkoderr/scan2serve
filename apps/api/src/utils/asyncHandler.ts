@@ -6,7 +6,7 @@ import type { Request, Response, NextFunction, RequestHandler } from "express";
  * crashing the process with an unhandled rejection.
  */
 export const asyncHandler = (
-  fn: (req: Request, res: Response, next: NextFunction) => Promise<void>
+  fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>
 ): RequestHandler => {
   return (req, res, next) => {
     fn(req, res, next).catch(next);

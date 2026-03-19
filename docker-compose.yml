@@ -1,0 +1,83 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: scan2serve-db
+    environment:
+      POSTGRES_DB: scan2serve
+      POSTGRES_USER: scan2serve
+      POSTGRES_PASSWORD: scan2serve
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scan2serve -d scan2serve"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  api:
+    image: node:20-alpine
+    container_name: scan2serve-api
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - api-node-modules:/app/node_modules
+    environment:
+      NODE_ENV: development
+      CI: "true"
+      PNPM_CONFIG_CONFIRM_MODULES_PURGE: "false"
+      DATABASE_URL: postgresql://scan2serve:scan2serve@db:5432/scan2serve
+      JWT_SECRET: dev-secret
+      ACCESS_TOKEN_TTL_MINUTES: 15
+      REFRESH_TOKEN_TTL_DAYS: 7
+      BCRYPT_SALT_ROUNDS: 10
+      CLIENT_URL: http://localhost:3000
+      COOKIE_DOMAIN: localhost
+      PORT: 4000
+    command: >
+      sh -c "corepack enable && pnpm install --no-frozen-lockfile && pnpm --filter @scan2serve/api db:push && pnpm --filter @scan2serve/api dev"
+    ports:
+      - "4000:4000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:4000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  web:
+    image: node:20-alpine
+    container_name: scan2serve-web
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - web-node-modules:/app/node_modules
+    environment:
+      NODE_ENV: development
+      CI: "true"
+      PNPM_CONFIG_CONFIRM_MODULES_PURGE: "false"
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+      PORT: 3000
+    command: >
+      sh -c "corepack enable && pnpm install --no-frozen-lockfile && pnpm --filter @scan2serve/web exec next dev --hostname 0.0.0.0 --port 3000"
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:3000 >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+volumes:
+  db-data:
+  api-node-modules:
+  web-node-modules:

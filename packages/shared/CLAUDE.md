@@ -17,3 +17,7 @@ import { UserRole, OrderStatus, ORDER_STATUS_FLOW } from "@scan2serve/shared";
 - React components (frontend only)
 - Database models or Prisma types (backend only)
 - Environment-specific config
+
+## Updates 2026-03-19
+- Updated API response types to include `status: 1|0` and structured `error`; added `UserProfile` type for auth responses.
+- Extended shared business types to include `updatedAt` and `BusinessRejection[]` on `BusinessProfile`.

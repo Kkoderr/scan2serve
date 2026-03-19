@@ -30,3 +30,19 @@ pnpm lint   # run Next.js ESLint
 ## Environment
 - Copy `.env.example` to `.env.local`
 - `NEXT_PUBLIC_API_URL` points to the Express backend
+
+## Updates 2026-03-19
+- Added auth context + API client with cookie-based flow and 401 refresh retry.
+- Built `/login`, `/register`, `/register/business`, and dashboard placeholder; wrapped app with `AuthProvider`.
+- Added `.env.example` for `NEXT_PUBLIC_API_URL`.
+- Added Vitest + testing-library + jsdom setup; tests for api fetch retry and auth context login behavior (`tests/`).
+- Extended auth context to include business profile state (`businesses`, selected business, profile create/update/list refresh methods) fetched at login/bootstrap.
+- Reworked `/dashboard` into Layer 3 status-aware UI with business cards selector, locked overlay for `pending/rejected`, and onboarding CTA when no profile exists.
+- Added `/dashboard/onboarding` for business profile create/edit/resubmit flow.
+- Added `tests/dashboard.test.tsx` for onboarding-required and pending-lock dashboard states.
+- Docker compose diagnostics: web container command is currently invalid after install. `pnpm --filter @scan2serve/web dev -- --hostname 0.0.0.0 --port 3000` resolves to `next dev --port 3000 -- --hostname ...`, and Next interprets `--hostname` as a directory (`Invalid project directory provided`).
+- Compose fix applied in `docker-compose.yml`: web command switched to `pnpm --filter @scan2serve/web exec next dev --hostname 0.0.0.0 --port 3000`; verified web boots and reaches ready state in compose.
+- Added admin moderation UI at `src/app/admin/page.tsx` (status-filtered list with approve/reject actions) for Layer 3 moderation flow.
+- Improved onboarding/dashboard UX for rejection visibility and wrapped onboarding page with `Suspense` for `useSearchParams` build compatibility.
+- Removed unsupported Vitest coverage typing from `vitest.config.ts`; `pnpm --filter @scan2serve/web build` and tests now pass.
+- Compose healthcheck probe updated to `http://127.0.0.1:3000` to avoid IPv6 localhost false negatives.
