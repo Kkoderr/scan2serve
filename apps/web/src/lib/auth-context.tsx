@@ -29,7 +29,7 @@ type AuthContextType = {
   loading: boolean;
   businessLoading: boolean;
   error: string | null;
-  login: (input: LoginRequest) => Promise<void>;
+  login: (input: LoginRequest) => Promise<UserProfile>;
   register: (input: RegisterRequest) => Promise<void>;
   loginCustomerFromQr: (input: LoginRequest & { qrToken: string }) => Promise<void>;
   registerCustomerFromQr: (input: RegisterRequest & { role: "customer"; qrToken: string }) => Promise<void>;
@@ -104,7 +104,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     refreshProfile().finally(() => setLoading(false));
   }, []);
 
-  const login = async (input: LoginRequest) => {
+  const login = async (input: LoginRequest): Promise<UserProfile> => {
     setError(null);
     try {
       const data = await apiFetch<{ user: UserProfile }>("/api/auth/login", {
@@ -118,6 +118,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setBusinesses([]);
         setSelectedBusinessId(null);
       }
+      return data.user;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
       throw err;

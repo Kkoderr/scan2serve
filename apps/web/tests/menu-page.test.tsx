@@ -1,0 +1,396 @@
+import React from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import DashboardMenuPage from "../src/app/dashboard/menu/page";
+
+const pushMock = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: pushMock }),
+}));
+
+const useAuthMock = vi.fn();
+vi.mock("../src/lib/auth-context", () => ({
+  useAuth: () => useAuthMock(),
+}));
+
+const apiFetchMock = vi.fn();
+vi.mock("../src/lib/api", () => ({
+  apiFetch: (...args: any[]) => apiFetchMock(...args),
+}));
+
+describe("DashboardMenuPage", () => {
+  beforeEach(() => {
+    pushMock.mockReset();
+    useAuthMock.mockReset();
+    apiFetchMock.mockReset();
+  });
+
+  it("shows role guard for non-business users", () => {
+    useAuthMock.mockReturnValue({
+      user: { id: "u1", email: "admin@example.com", role: "admin" },
+      loading: false,
+      selectedBusiness: null,
+    });
+
+    render(<DashboardMenuPage />);
+    expect(screen.getByText("Only business users can manage menu.")).toBeTruthy();
+  });
+
+  it("loads categories and menu items for approved business", async () => {
+    useAuthMock.mockReturnValue({
+      user: { id: "u1", email: "biz@example.com", role: "business" },
+      loading: false,
+      selectedBusiness: { id: "b1", status: "approved" },
+    });
+    apiFetchMock.mockImplementation((path: string) => {
+      if (path === "/api/business/categories") {
+        return Promise.resolve({
+          categories: [{ id: "c1", businessId: "b1", name: "Starters", sortOrder: 0 }],
+        });
+      }
+      if (path === "/api/business/menu-items?page=1&limit=10") {
+        return Promise.resolve({
+          items: [],
+          total: 0,
+          page: 1,
+          limit: 10,
+        });
+      }
+      if (path === "/api/business/menu-suggestions/categories") {
+        return Promise.resolve({ suggestions: [] });
+      }
+      if (path.startsWith("/api/ai/menu/item-suggestions")) {
+        return Promise.resolve({ suggestions: [] });
+      }
+      return Promise.resolve({});
+    });
+
+    render(<DashboardMenuPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Categories")).toBeTruthy();
+      expect(screen.getByText("Starters")).toBeTruthy();
+      expect(screen.getByText("Menu Items")).toBeTruthy();
+    });
+  });
+
+  it("requests next page when pagination next is clicked", async () => {
+    useAuthMock.mockReturnValue({
+      user: { id: "u1", email: "biz@example.com", role: "business" },
+      loading: false,
+      selectedBusiness: { id: "b1", status: "approved" },
+    });
+
+    apiFetchMock.mockImplementation((path: string) => {
+      if (path === "/api/business/categories") {
+        return Promise.resolve({
+          categories: [{ id: "c1", businessId: "b1", name: "Starters", sortOrder: 0 }],
+        });
+      }
+      if (path === "/api/business/menu-items?page=1&limit=10") {
+        return Promise.resolve({
+          items: [],
+          total: 25,
+          page: 1,
+          limit: 10,
+        });
+      }
+      if (path === "/api/business/menu-items?page=2&limit=10") {
+        return Promise.resolve({
+          items: [],
+          total: 25,
+          page: 2,
+          limit: 10,
+        });
+      }
+      if (path === "/api/business/menu-suggestions/categories") {
+        return Promise.resolve({ suggestions: [] });
+      }
+      if (path.startsWith("/api/ai/menu/item-suggestions")) {
+        return Promise.resolve({ suggestions: [] });
+      }
+      return Promise.resolve({});
+    });
+
+    render(<DashboardMenuPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Page 1 of 3 (25 total items)")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText("Next"));
+
+    await waitFor(() => {
+      expect(apiFetchMock).toHaveBeenCalledWith(
+        "/api/business/menu-items?page=2&limit=10",
+        expect.objectContaining({ method: "GET" })
+      );
+      expect(screen.getByText("Page 2 of 3 (25 total items)")).toBeTruthy();
+    });
+  });
+
+  it("supports item edit and delete actions", async () => {
+    useAuthMock.mockReturnValue({
+      user: { id: "u1", email: "biz@example.com", role: "business" },
+      loading: false,
+      selectedBusiness: { id: "b1", status: "approved" },
+    });
+
+    let currentItems = [
+      {
+        id: "i1",
+        businessId: "b1",
+        categoryId: "c1",
+        name: "Burger",
+        description: null,
+        price: "12.50",
+        imageUrl: null,
+        dietaryTags: [],
+        isAvailable: true,
+        sortOrder: 0,
+      },
+    ];
+
+    apiFetchMock.mockImplementation((path: string, options?: { method?: string }) => {
+      if (path === "/api/business/categories") {
+        return Promise.resolve({
+          categories: [{ id: "c1", businessId: "b1", name: "Main", sortOrder: 0 }],
+        });
+      }
+      if (path === "/api/business/menu-items?page=1&limit=10" && options?.method === "GET") {
+        return Promise.resolve({
+          items: currentItems,
+          total: currentItems.length,
+          page: 1,
+          limit: 10,
+        });
+      }
+      if (path === "/api/business/menu-items/i1" && options?.method === "PATCH") {
+        currentItems = [
+          {
+            ...currentItems[0],
+            name: "Burger XL",
+            price: "14.50",
+          },
+        ];
+        return Promise.resolve({ item: { id: "i1" } });
+      }
+      if (path === "/api/business/menu-items/i1" && options?.method === "DELETE") {
+        currentItems = [];
+        return Promise.resolve({ deleted: true });
+      }
+      if (path === "/api/business/menu-suggestions/categories") {
+        return Promise.resolve({ suggestions: [] });
+      }
+      if (path.startsWith("/api/ai/menu/item-suggestions")) {
+        return Promise.resolve({ suggestions: [] });
+      }
+      return Promise.resolve({});
+    });
+
+    render(<DashboardMenuPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Burger")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText("Edit"));
+    fireEvent.change(screen.getByDisplayValue("Burger"), { target: { value: "Burger XL" } });
+    fireEvent.change(screen.getByDisplayValue("12.50"), { target: { value: "14.50" } });
+    fireEvent.click(screen.getByText("Save"));
+
+    await waitFor(() => {
+      expect(apiFetchMock).toHaveBeenCalledWith(
+        "/api/business/menu-items/i1",
+        expect.objectContaining({ method: "PATCH" })
+      );
+    });
+
+    fireEvent.click(screen.getAllByText("Delete")[1]);
+
+    await waitFor(() => {
+      expect(apiFetchMock).toHaveBeenCalledWith(
+        "/api/business/menu-items/i1",
+        expect.objectContaining({ method: "DELETE" })
+      );
+    });
+  });
+
+  it("keeps actions blocked when selected business is pending", () => {
+    useAuthMock.mockReturnValue({
+      user: { id: "u1", email: "biz@example.com", role: "business" },
+      loading: false,
+      selectedBusiness: { id: "b1", status: "pending" },
+    });
+
+    render(<DashboardMenuPage />);
+
+    expect(apiFetchMock).not.toHaveBeenCalled();
+    expect(screen.getByText("Add item")).toHaveProperty("disabled", true);
+  });
+
+  it("shows dietary tags and suggestion click prefills item + tag", async () => {
+    useAuthMock.mockReturnValue({
+      user: { id: "u1", email: "biz@example.com", role: "business" },
+      loading: false,
+      selectedBusiness: { id: "b1", status: "approved" },
+    });
+
+    apiFetchMock.mockImplementation((path: string) => {
+      if (path === "/api/business/categories") {
+        return Promise.resolve({
+          categories: [{ id: "c1", businessId: "b1", name: "Beverages", sortOrder: 0 }],
+        });
+      }
+      if (path === "/api/business/menu-items?page=1&limit=10") {
+        return Promise.resolve({
+          items: [
+            {
+              id: "i1",
+              businessId: "b1",
+              categoryId: "c1",
+              name: "Smoothie",
+              description: null,
+              price: "9.00",
+              imageUrl: null,
+              dietaryTags: ["vegetarian"],
+              isAvailable: true,
+              sortOrder: 0,
+            },
+          ],
+          total: 1,
+          page: 1,
+          limit: 10,
+        });
+      }
+      if (path === "/api/business/menu-suggestions/categories") {
+        return Promise.resolve({ suggestions: [] });
+      }
+      if (path.startsWith("/api/ai/menu/item-suggestions")) {
+        return Promise.resolve({
+          suggestions: [{ label: "Lemon Iced Tea", confidence: 0.95, dietaryTags: ["vegan"] }],
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    render(<DashboardMenuPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText("vegetarian").length).toBeGreaterThan(0);
+      expect(screen.getByText("Lemon Iced Tea")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText("Lemon Iced Tea"));
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("Lemon Iced Tea")).toBeTruthy();
+      expect(screen.getByDisplayValue("vegan")).toBeTruthy();
+    });
+  });
+
+  it("reloads suggestions when category changes", async () => {
+    useAuthMock.mockReturnValue({
+      user: { id: "u1", email: "biz@example.com", role: "business" },
+      loading: false,
+      selectedBusiness: { id: "b1", status: "approved" },
+    });
+
+    apiFetchMock.mockImplementation((path: string) => {
+      if (path === "/api/business/categories") {
+        return Promise.resolve({
+          categories: [
+            { id: "c1", businessId: "b1", name: "Beverages", sortOrder: 0 },
+            { id: "c2", businessId: "b1", name: "Desserts", sortOrder: 1 },
+          ],
+        });
+      }
+      if (path === "/api/business/menu-items?page=1&limit=10") {
+        return Promise.resolve({ items: [], total: 0, page: 1, limit: 10 });
+      }
+      if (path === "/api/business/menu-suggestions/categories") {
+        return Promise.resolve({ suggestions: [] });
+      }
+      if (path.startsWith("/api/ai/menu/item-suggestions") && path.includes("categoryId=c1")) {
+        return Promise.resolve({
+          suggestions: [{ label: "Mango Smoothie", confidence: 0.92, dietaryTags: ["vegetarian"] }],
+        });
+      }
+      if (path.startsWith("/api/ai/menu/item-suggestions") && path.includes("categoryId=c2")) {
+        return Promise.resolve({
+          suggestions: [{ label: "Chocolate Brownie", confidence: 0.9, dietaryTags: ["vegetarian"] }],
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    render(<DashboardMenuPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Mango Smoothie")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText("Desserts"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Chocolate Brownie")).toBeTruthy();
+    });
+  });
+
+  it("clears suggestions while search request is in-flight", async () => {
+    useAuthMock.mockReturnValue({
+      user: { id: "u1", email: "biz@example.com", role: "business" },
+      loading: false,
+      selectedBusiness: { id: "b1", status: "approved" },
+    });
+
+    let resolveQuery: ((value: { suggestions: Array<{ label: string; confidence: number; dietaryTags: string[] }> }) => void) | null = null;
+
+    apiFetchMock.mockImplementation((path: string) => {
+      if (path === "/api/business/categories") {
+        return Promise.resolve({
+          categories: [{ id: "c1", businessId: "b1", name: "Beverages", sortOrder: 0 }],
+        });
+      }
+      if (path === "/api/business/menu-items?page=1&limit=10") {
+        return Promise.resolve({ items: [], total: 0, page: 1, limit: 10 });
+      }
+      if (path === "/api/business/menu-suggestions/categories") {
+        return Promise.resolve({ suggestions: [] });
+      }
+      if (path.startsWith("/api/ai/menu/item-suggestions") && path.includes("q=le")) {
+        return new Promise((resolve) => {
+          resolveQuery = resolve;
+        });
+      }
+      if (path.startsWith("/api/ai/menu/item-suggestions")) {
+        return Promise.resolve({
+          suggestions: [{ label: "Lemon Iced Tea", confidence: 0.95, dietaryTags: ["vegan"] }],
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    render(<DashboardMenuPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Lemon Iced Tea")).toBeTruthy();
+    });
+
+    fireEvent.change(screen.getByPlaceholderText("Item name"), {
+      target: { value: "le" },
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Lemon Iced Tea")).toBeNull();
+    });
+
+    resolveQuery?.({
+      suggestions: [{ label: "Lemon Tart", confidence: 0.93, dietaryTags: ["vegetarian"] }],
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Lemon Tart")).toBeTruthy();
+    });
+  });
+});

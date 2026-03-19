@@ -15,8 +15,14 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      await login({ email, password });
-      router.push("/dashboard");
+      const profile = await login({ email, password });
+      if (profile.role === "admin") {
+        router.push("/admin");
+      } else if (profile.role === "business") {
+        router.push("/dashboard");
+      } else {
+        router.push("/home");
+      }
     } catch {
       // error handled in context
     } finally {

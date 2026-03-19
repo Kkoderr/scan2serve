@@ -19,7 +19,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!loading && !user) {
-      router.push("/login");
+      router.push("/home");
     }
   }, [loading, user, router]);
 
@@ -141,9 +141,17 @@ export default function DashboardPage() {
         <section className="relative rounded-xl border bg-white p-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-xl font-semibold">Active business overview</h2>
-            <span className="rounded-full bg-gray-200 px-3 py-1 text-xs font-medium">
-              {statusLabel}
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => router.push("/dashboard/menu")}
+                className="rounded-md border border-gray-300 px-3 py-1 text-xs font-medium"
+              >
+                Manage menu
+              </button>
+              <span className="rounded-full bg-gray-200 px-3 py-1 text-xs font-medium">
+                {statusLabel}
+              </span>
+            </div>
           </div>
 
           <div className={isBlocked ? "pointer-events-none blur-[2px]" : ""}>

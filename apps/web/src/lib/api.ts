@@ -13,18 +13,47 @@ async function parseResponse<T>(res: Response): Promise<ApiResponse<T>> {
   return data as ApiResponse<T>;
 }
 
+function normalizeErrorMessage(message?: string): string {
+  if (!message) return "Request failed";
+  const trimmed = message.trim();
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) {
+      const lines = parsed
+        .map((entry) => (typeof entry?.message === "string" ? entry.message : null))
+        .filter((entry): entry is string => Boolean(entry));
+      if (lines.length > 0) return lines.join(" ");
+    }
+    if (parsed && typeof parsed === "object" && "message" in parsed) {
+      const parsedMessage = (parsed as { message?: unknown }).message;
+      if (typeof parsedMessage === "string" && parsedMessage.trim()) return parsedMessage;
+    }
+  } catch {
+    // Message is plain text.
+  }
+
+  if (trimmed.startsWith("[") && trimmed.includes("\"message\"")) {
+    return "Please check the entered details and try again.";
+  }
+
+  return trimmed;
+}
+
 export async function apiFetch<T>(
   path: string,
   options: RequestInit = {},
   { retryOn401 = true }: { retryOn401?: boolean } = {}
 ): Promise<T> {
+  const mergedHeaders = {
+    ...defaultHeaders,
+    ...(options.headers || {}),
+  };
+
   const response = await fetch(`${API_URL}${path}`, {
-    credentials: "include",
-    headers: {
-      ...defaultHeaders,
-      ...(options.headers || {}),
-    },
     ...options,
+    credentials: "include",
+    headers: mergedHeaders,
   });
 
   if (response.status === 401 && retryOn401) {
@@ -42,6 +71,6 @@ export async function apiFetch<T>(
   if (body.status === 1 && body.data !== undefined) {
     return body.data;
   }
-  const message = body.error?.message || "Request failed";
+  const message = normalizeErrorMessage(body.error?.message);
   throw new Error(message);
 }

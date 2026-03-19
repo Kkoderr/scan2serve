@@ -65,3 +65,34 @@ pnpm db:studio    # open Prisma Studio GUI
 - Added QR rotation audit model in Prisma (`QrCodeRotation`) with migration `20260319230000_qr_rotation_audit`.
 - Extended regeneration flow to persist rotation history (`oldToken`, `newToken`, actor, reason) and optional grace expiry via `QR_OLD_TOKEN_GRACE_SEC`.
 - Added rotation-history endpoint `GET /tables/:tableId/qr/rotations` and public QR grace-token resolution support in `src/routes/public.ts`.
+- Started Layer 4 (ADR-007 accepted): added approved-business menu endpoints in `src/routes/business.ts` for category CRUD/reorder and menu-item CRUD/reorder/availability with pagination and decimal-string price validation.
+- Added `tests/menuRoutes.test.ts` covering category/menu flows and approved-business gating.
+
+## Updates 2026-03-20
+- Added dedicated process health endpoint `GET /healthz` in `src/index.ts` for infrastructure probes.
+- Docker compose health checks now target `/healthz` instead of user-facing routes, reducing root-route log noise.
+- Seed credentials are now env-configurable in `prisma/seed.ts` using `ADMIN_SEED_EMAIL` and `ADMIN_SEED_PASSWORD` (with safe defaults), documented in `.env.example`.
+- Expanded Layer 4 API tests in `tests/menuRoutes.test.ts` to cover duplicate category conflicts (`CATEGORY_EXISTS`) and menu-item update error paths (`VALIDATION_ERROR`, `CATEGORY_NOT_FOUND`).
+- Local setup note: creating `apps/api/.env` from `.env.example` is required for seed/migrate commands unless `DATABASE_URL` is passed inline.
+- Logging architecture update: added singleton logger at `src/utils/logger.ts` and replaced API bootstrap `console.*` usage in `src/index.ts` with structured logger events.
+- Endpoint observability update: request middleware now emits `http.request.start`, `http.request.finish`, and `http.request.aborted` with request-id, route metadata, duration, response bytes, client IP, and user context where available.
+- Error-path logging update: global error handler now emits structured `http.request.error` events via logger; startup emits `api.server.started`.
+- Added `LOG_LEVEL` to `.env.example` to control logger verbosity.
+- Business resolution fix: `resolveBusinessForUser` in `src/middleware/businessApproval.ts` now prefers an approved business when no explicit business id is provided, preventing menu/category operations from being blocked by a newer pending profile.
+- Added regression coverage in `tests/menuRoutes.test.ts` for mixed-status businesses (pending + approved) without `x-business-id` header.
+- ADR-010 implementation: added subtle AI-assist suggestion endpoints under business scope in `src/routes/business.ts`:
+  - `GET /menu-suggestions/categories` (top-5 common categories excluding existing names),
+  - `GET /menu-suggestions/items?categoryId=...` (top-5 category-relevant items excluding existing names; includes dietary-tag hints).
+- Added curated suggestion engine in `src/services/menuSuggestions.ts` with deterministic fallback behavior and filtered dietary tags.
+- Extended `tests/menuRoutes.test.ts` with suggestion endpoint coverage (exclusion logic + dietary tags).
+- ADR-011 implementation baseline: added singleton LLM client in `src/services/llmClient.ts` (lazy model-handle init, reused per API process).
+- Added LLM-backed suggestion orchestrator in `src/services/llmMenuSuggestions.ts` with deterministic fallback (`menuSuggestions.ts`) when LLM key/call is unavailable.
+- Added dedicated AI endpoint router `src/routes/ai.ts` and mounted it at `/api/ai` in `src/index.ts`; item suggestions now available at `GET /api/ai/menu/item-suggestions`.
+- Updated business item-suggestion endpoint (`GET /api/business/menu-suggestions/items`) to use the same singleton-backed LLM/fallback service for backward compatibility.
+- Added LLM env vars in `.env.example` (`OPENAI_API_KEY`, `OPENAI_BASE_URL`, `LLM_MENU_MODEL`, `LLM_MENU_TIMEOUT_MS`) and singleton/fallback tests in `tests/llmMenuSuggestions.test.ts`.
+- Timeout handling polish: `src/services/llmClient.ts` now logs LLM aborts as `ai.model.request.timeout` (info-level) instead of error-style stack dumps, while non-timeout failures remain concise warnings.
+- Increased default LLM timeout in `.env.example` to `LLM_MENU_TIMEOUT_MS=4500` to reduce false aborts on slower model responses.
+- Added explicit fallback-observability event `ai.menu_suggestions.fallback_used` in `src/services/llmMenuSuggestions.ts` to make LLM->deterministic fallback transitions visible.
+- Suggestion continuity fix: `src/services/llmMenuSuggestions.ts` now requests a wider LLM candidate set (`limit * 6`, capped at 50) and trims after filtering/deduping, preventing repeated top-5 exhaustion.
+- Deterministic fallback now backfills from a global deduped item pool when category-scoped list is exhausted (`src/services/menuSuggestions.ts`), so suggestions continue even after many existing items.
+- Added service-level orchestration tests in `tests/llmMenuSuggestions.service.test.ts` for wide-candidate fetch behavior and fallback fill correctness.

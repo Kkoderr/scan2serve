@@ -43,10 +43,16 @@ export const resolveBusinessForUser = async (req: Request) => {
     });
   }
 
-  return prisma.business.findFirst({
+  const businesses = await prisma.business.findMany({
     where: { userId: req.user.id },
     orderBy: { updatedAt: "desc" },
   });
+
+  const approved = businesses.find(
+    (business: { status: "pending" | "approved" | "rejected" }) =>
+      business.status === "approved"
+  );
+  return approved ?? businesses[0] ?? null;
 };
 
 export const requireApprovedBusiness = async (

@@ -9,31 +9,34 @@
 
 ## Last Session
 
-**Date:** 2026-03-19
+**Date:** 2026-03-20
 **What was done:**
-- Completed optional ADR-006 lifecycle enhancements (except shared rate-limit backend):
-  - Added `QrCodeRotation` audit model and migration (`20260319230000_qr_rotation_audit`).
-  - Extended QR regeneration to persist rotation history with reason/actor and optional grace expiry (`QR_OLD_TOKEN_GRACE_SEC`).
-  - Added rotation history endpoint: `GET /api/business/tables/:tableId/qr/rotations`.
-  - Added public QR grace support: old token can still resolve during configured grace window.
-- Regenerated Prisma client after schema update.
-- Validation completed:
-  - `pnpm --filter @scan2serve/api test` passes (19 tests).
-  - `pnpm --filter @scan2serve/web test` passes.
-  - `pnpm --filter @scan2serve/api build` passes.
-  - `pnpm --filter @scan2serve/web build` passes.
+- Implemented AI suggestion continuity fix so suggestions do not dry up after many items:
+  - `apps/api/src/services/llmMenuSuggestions.ts` now requests a wider LLM candidate pool (`limit * 6`, capped at 50) and trims only after filtering/dedupe/ranking.
+  - `apps/api/src/services/menuSuggestions.ts` deterministic fallback now backfills from a global deduped item pool when category-local lists are exhausted.
+- Implemented dashboard suggestion UX fixes in `apps/web/src/app/dashboard/menu/page.tsx`:
+  - switched item suggestion calls to dedicated AI endpoint `/api/ai/menu/item-suggestions`,
+  - category changes now trigger category-specific suggestion reload,
+  - during typed search fetch, stale suggestions are cleared (no suggestion chips shown while request is in-flight).
+- Added tests:
+  - `apps/api/tests/llmMenuSuggestions.service.test.ts` for wide candidate requests + fallback fill behavior.
+  - `apps/web/tests/menu-page.test.tsx` coverage for category-change refresh and in-flight search suggestion clearing.
+- Revalidated quality gates:
+  - `pnpm --filter @scan2serve/api test -- llmMenuSuggestions.service.test.ts llmMenuSuggestions.test.ts` (passes; full API suite run also passed),
+  - `pnpm --filter @scan2serve/web test -- menu-page.test.tsx` (passes),
+  - `pnpm --filter @scan2serve/api build` and `pnpm --filter @scan2serve/web build` (pass).
 
 **What's NOT done yet:**
-- ADR-006 remains partial:
-  - `/menu/[slug]` is still placeholder UI (Layer 6 real public menu not implemented).
-  - Distributed/persistent rate limiting (beyond in-memory process scope) is still pending (explicitly deferred by user).
-- Layer 4+ features (menu/table/order/payment flows) are still pending implementation.
+- Layer 4 remaining work:
+  - optional UI polish for inline edit UX and bulk actions.
+  - no image upload pipeline yet (URL-only per ADR-007).
+- Layer 5+ features (tables/QR advanced flows, ordering/payments, dashboards) are still pending.
 - Production cookie/CORS hardening review still pending once deploy targets are fixed.
 
-**Next step:** Complete ADR-006 enforcement before Layer 4
-1. Keep current in-memory limiter as-is (per user decision) and move to Layer 4 planning.
-2. Draft Layer 4 ADR for menu management contracts and scope.
-3. Implement category/menu-item CRUD APIs + dashboard menu UI + tests.
+**Next step:** Harden AI suggestion performance and diversity
+1. Add lightweight in-memory cache + TTL for `/api/ai/menu/item-suggestions` to reduce repeated LLM calls on similar typed queries.
+2. Add request concurrency limiting for LLM calls to protect API latency under bursts.
+3. Tune prompt/ranking policy further for better novelty/diversity across large existing menus.
 
 **Build progress:**
 ```
@@ -169,6 +172,112 @@ Layer 11: Polish & Deploy
 - Added tests for rotation listing and grace-token public resolution.
 - Regenerated Prisma client and revalidated full API/web test + build suite.
 
+### 2026-03-19 — Session 20: ADR-007 accepted + Layer 4 implementation start
+- Accepted ADR-007 and implemented business menu/category API endpoints with approved-business gating.
+- Added Layer 4 API tests (`menuRoutes.test.ts`) and dashboard menu page baseline (`/dashboard/menu`) with web test coverage.
+- Updated shared menu price contract to decimal string.
+- Revalidated API/web tests and builds successfully.
+
+### 2026-03-20 — Session 21: Health endpoints + Layer 4 UI parity pass
+- Added dedicated `/healthz` endpoints for API and web and moved docker-compose healthchecks to those paths.
+- Extended `/dashboard/menu` to include category rename/delete/reorder and menu item edit/delete plus pagination controls.
+- Updated web menu tests with pagination interaction coverage.
+- Revalidated API/web tests and build pipelines successfully.
+
+### 2026-03-20 — Session 22: Owner admin access alignment
+- Verified moderation panel is available at `/admin` with approve/reject flow.
+- Fixed login role routing so admin users are redirected to `/admin` instead of `/dashboard`.
+- Added owner-facing entry points on home page plus `/owner` redirect route.
+- Revalidated web tests and web build after owner-flow updates.
+
+### 2026-03-20 — Session 23: Owner flow tightened + env-based admin seed credentials
+- Removed separate public admin entry/button from home page and removed `/owner` alias route.
+- Kept role-based login redirect so admin credentials always land on `/admin`.
+- Added configurable seed env vars (`ADMIN_SEED_EMAIL`, `ADMIN_SEED_PASSWORD`) and wired them into `apps/api/prisma/seed.ts`.
+- Revalidated API and web builds after changes.
+
+### 2026-03-20 — Session 24: Layer 4 test completion + local env seeding
+- Created `apps/api/.env` from `.env.example` to simplify local API commands.
+- Expanded Layer 4 API tests (`menuRoutes.test.ts`) for duplicate category rejection and menu-item update validation/ownership errors.
+- Expanded Layer 4 web tests (`menu-page.test.tsx`) for item edit/delete interactions and blocked-business state behavior.
+- Re-ran DB seed against local docker Postgres using explicit `DATABASE_URL`; seeding completed successfully.
+- Revalidated API/web test and build suites successfully.
+
+### 2026-03-20 — Session 25: Root-route redirect + `/home` landing split
+- Added ADR-008 and accepted root-route policy: `/` now redirects by auth state while the public landing page lives at `/home`.
+- Migrated previous `src/app/page.tsx` landing content to `src/app/home/page.tsx`.
+- Implemented server-side root redirect in `src/app/page.tsx` using cookie presence + `/api/auth/me` role check (`/dashboard` for business, `/admin` for admin, otherwise `/home`).
+- Added refresh fallback in `src/app/page.tsx`: when `/api/auth/me` is not valid but `refresh_token` exists, route using `/api/auth/refresh` response role.
+- Updated login fallback (`src/app/(auth)/login/page.tsx`) from `/` to `/home` for non-admin/non-business roles.
+- Added `apps/web/tests/root-page.test.ts`; web tests (16 total) and build pass.
+
+### 2026-03-20 — Session 26: Logout redirect alignment to `/home`
+- Updated unauthenticated guards in admin/dashboard routes to redirect to `/home` instead of `/login`.
+- Files updated: `apps/web/src/app/admin/page.tsx`, `apps/web/src/app/dashboard/page.tsx`, `apps/web/src/app/dashboard/onboarding/page.tsx`, `apps/web/src/app/dashboard/menu/page.tsx`.
+- Revalidated web test suite: `pnpm --filter @scan2serve/web test` passes (16 tests).
+
+### 2026-03-20 — Session 27: API singleton logger + structured endpoint logs
+- Added ADR-009 and accepted API logging standardization around a singleton logger utility.
+- Introduced `apps/api/src/utils/logger.ts` and routed API bootstrap/error/startup logs through it.
+- Upgraded endpoint logs in `apps/api/src/index.ts` to structured request lifecycle events with request IDs and detailed context.
+- Added `LOG_LEVEL` to `apps/api/.env.example`.
+- Revalidated API test/build pipeline: `pnpm --filter @scan2serve/api test` (24) and `pnpm --filter @scan2serve/api build` pass.
+
+### 2026-03-20 — Session 28: Menu category create fix for mixed business statuses
+- Investigated non-functional category creation in menu flow and identified fallback business resolution behavior as the blocker when users have multiple business profiles.
+- Updated `resolveBusinessForUser` to prefer an approved business when no explicit business id is provided, reducing false `BUSINESS_PENDING_APPROVAL` failures.
+- Added regression test coverage for mixed-status fallback behavior in `apps/api/tests/menuRoutes.test.ts`.
+- Revalidated API suite and build: `pnpm --filter @scan2serve/api test` (25 tests) and `pnpm --filter @scan2serve/api build` pass.
+
+### 2026-03-20 — Session 29: Menu category create fix for content-type/header merge
+- Investigated API logs showing `contentType: text/plain;charset=UTF-8` on `POST /api/business/categories` and identified `apiFetch` header merge order bug in web client.
+- Fixed `apps/web/src/lib/api.ts` so merged headers are applied after options spread, preserving default JSON content-type alongside custom headers.
+- Added `apps/web/tests/api.test.ts` coverage to verify outbound category-create style requests keep both `Content-Type: application/json` and `x-business-id`.
+- Revalidated web suite and build: `pnpm --filter @scan2serve/web test` (17 tests) and `pnpm --filter @scan2serve/web build` pass.
+
+### 2026-03-20 — Session 30: ADR-010 drafted for AI-assisted menu authoring
+- Added `docs/adr/ADR-010-ai-assisted-menu-suggestions.md` with proposed subtle AI scope for categories/items suggestions, dietary auto-fill, and dietary-tag display.
+- Included low-hassle enhancement recommendations in ADR-010 to accelerate implementation with minimal complexity.
+- Updated docs/root context files to mark ADR-010 as proposed and awaiting approval before coding.
+
+### 2026-03-20 — Session 31: ADR-010 implementation (AI-assisted menu suggestions)
+- Marked ADR-010 as accepted and implemented business-scoped suggestion endpoints for category/item authoring.
+- Added deterministic suggestion service (`apps/api/src/services/menuSuggestions.ts`) and routed new suggestion APIs in `apps/api/src/routes/business.ts`.
+- Updated dashboard menu UI to show suggestion chips, auto-fill dietary tags from selected item suggestions, and display dietary-tag badges on item cards.
+- Extended API and web test coverage for suggestion filtering/autofill/tag-visibility behavior.
+- Revalidated full API/web suites and builds: API tests (26), web tests (18), API build, web build.
+
+### 2026-03-20 — Session 32: ADR-011 drafted for LLM suggestions + autocomplete
+- Added `docs/adr/ADR-011-llm-menu-suggestions-autocomplete.md` as a proposed enhancement for LLM-driven top-5 item suggestions based on category context.
+- Defined typed-input autocomplete behavior (`q` query), plus top-5 common fallback when category has no items.
+- Explicitly preserved deterministic fallback, timeout, and caching constraints for reliability and cost control.
+- Updated docs/root context files to mark ADR-011 as pending approval before implementation.
+
+### 2026-03-20 — Session 33: ADR-011 API implementation + singleton LLM client
+- Implemented singleton LLM client (`apps/api/src/services/llmClient.ts`) with lazy process-wide model-handle initialization.
+- Added LLM suggestion orchestration service (`apps/api/src/services/llmMenuSuggestions.ts`) with deterministic fallback path.
+- Added dedicated AI endpoint namespace route (`apps/api/src/routes/ai.ts`) and mounted `/api/ai` in API bootstrap.
+- Updated existing business item-suggestion endpoint to use the same singleton-backed service so current clients continue to work.
+- Added LLM env configuration keys and new tests (`apps/api/tests/llmMenuSuggestions.test.ts`) to validate singleton behavior and fallback.
+- Updated ADR-011 to `Accepted` and synced CLAUDE context files (`apps/api/CLAUDE.md`, `docs/CLAUDE.md`, `CLAUDE.md`).
+
+### 2026-03-20 — Session 34: LLM timeout/fallback logging polish
+- Investigated runtime `AbortError` logs from LLM calls timing out around `~2.5s`.
+- Updated LLM client error handling so timeout aborts are treated as expected fallback events (`ai.model.request.timeout`, info level) instead of stack-heavy warnings.
+- Increased default LLM timeout to `4500ms` in `.env.example` to reduce false timeouts for slower model responses.
+- Added explicit fallback telemetry (`ai.menu_suggestions.fallback_used`) to observe when deterministic fallback is serving suggestions.
+- Revalidated API tests/build after changes.
+
+### 2026-03-20 — Session 35: AI suggestion continuity + dashboard suggestion UX fixes
+- Fixed suggestion exhaustion by over-fetching LLM candidates in `apps/api/src/services/llmMenuSuggestions.ts` and trimming after exclusion/ranking.
+- Improved deterministic fallback in `apps/api/src/services/menuSuggestions.ts` to backfill from a global deduped item pool when category-local suggestions are exhausted.
+- Switched dashboard item suggestions to `/api/ai/menu/item-suggestions` with business/category/query params and debounced typed-query fetch.
+- Updated dashboard behavior to clear stale suggestion chips while search requests are in-flight and reload suggestions when selected category changes.
+- Added/updated tests:
+  - `apps/api/tests/llmMenuSuggestions.service.test.ts`,
+  - `apps/web/tests/menu-page.test.tsx` (category-change + in-flight clearing scenarios).
+- Revalidated API/web tests and both builds successfully.
+
 ---
 
 ## Decisions Log
@@ -179,6 +288,11 @@ Layer 11: Polish & Deploy
 | ADR-003 | Testing strategy (Vitest, supertest, testing-library; status field enforcement) | Establish unified test stack and coverage expectations across API & web | 2026-03-19 |
 | ADR-004 | Business onboarding flow and admin approval gate | Define Layer 3 boundaries before implementation (business profile lifecycle + admin moderation) | 2026-03-19 |
 | ADR-006 | QR-scoped customer auth with business-only website auth | Remove non-QR customer pathways, keep shared auth endpoints, and enforce QR token context for customer auth | 2026-03-19 |
+| ADR-007 | Layer 4 menu management contracts | Define category/menu-item CRUD/reorder/availability scope and quality bars before Layer 4 coding | 2026-03-19 |
+| ADR-008 | Root route redirect and `/home` landing split | Ensure `/` sends authenticated users into app areas and keeps explicit unauthenticated landing at `/home` | 2026-03-20 |
+| ADR-009 | API singleton logger and structured request logs | Centralize backend logs in one logger and improve endpoint diagnostics with request lifecycle context | 2026-03-20 |
+| ADR-010 | AI-assisted menu suggestions and dietary auto-fill | Introduce subtle assistive suggestions for category/item authoring and improve dietary-tag visibility | 2026-03-20 |
+| ADR-011 | LLM-driven menu suggestions with typed autocomplete | Improve relevance of top-5 suggestions using category context + typed text while preserving deterministic fallback | 2026-03-20 |
 
 ---
 

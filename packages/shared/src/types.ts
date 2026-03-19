@@ -99,7 +99,7 @@ export interface MenuItem {
   businessId: string;
   name: string;
   description: string | null;
-  price: number;
+  price: string;
   imageUrl: string | null;
   isAvailable: boolean;
   dietaryTags: string[];

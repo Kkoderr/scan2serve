@@ -1,11 +1,14 @@
 import express from "express";
 import crypto from "crypto";
 import { z } from "zod";
+import { DIETARY_TAGS } from "@scan2serve/shared";
 import { prisma } from "../prisma";
 import { asyncHandler } from "../utils/asyncHandler";
 import { sendError, sendSuccess } from "../utils/response";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { requireApprovedBusiness, resolveBusinessForUser } from "../middleware/businessApproval";
+import { suggestCategories } from "../services/menuSuggestions";
+import { getMenuItemSuggestions } from "../services/llmMenuSuggestions";
 
 const router: express.Router = express.Router();
 
@@ -43,6 +46,60 @@ const qrRotateSchema = z.object({
 
 const qrRotationListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).optional(),
+});
+const categoryCreateSchema = z.object({
+  name: z.string().min(2).max(80),
+});
+const categoryUpdateSchema = z.object({
+  name: z.string().min(2).max(80).optional(),
+  sortOrder: z.number().int().min(0).optional(),
+});
+const categoryReorderSchema = z.object({
+  orders: z.array(
+    z.object({
+      id: z.string().min(1),
+      sortOrder: z.number().int().min(0),
+    })
+  ).min(1),
+});
+const menuItemCreateSchema = z.object({
+  categoryId: z.string().min(1),
+  name: z.string().min(2).max(120),
+  description: z.string().max(2000).optional().nullable(),
+  price: z.string().regex(/^\d+(\.\d{1,2})?$/, "Price must be a decimal string"),
+  imageUrl: z.string().url().max(500).optional().nullable(),
+  dietaryTags: z.array(z.enum(DIETARY_TAGS)).optional(),
+  isAvailable: z.boolean().optional(),
+});
+const menuItemUpdateSchema = z.object({
+  categoryId: z.string().min(1).optional(),
+  name: z.string().min(2).max(120).optional(),
+  description: z.string().max(2000).optional().nullable(),
+  price: z.string().regex(/^\d+(\.\d{1,2})?$/, "Price must be a decimal string").optional(),
+  imageUrl: z.string().url().max(500).optional().nullable(),
+  dietaryTags: z.array(z.enum(DIETARY_TAGS)).optional(),
+  isAvailable: z.boolean().optional(),
+  sortOrder: z.number().int().min(0).optional(),
+});
+const menuItemReorderSchema = z.object({
+  orders: z.array(
+    z.object({
+      id: z.string().min(1),
+      sortOrder: z.number().int().min(0),
+    })
+  ).min(1),
+});
+const menuItemAvailabilitySchema = z.object({
+  isAvailable: z.boolean(),
+});
+const menuItemListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+const menuItemSuggestionQuerySchema = z.object({
+  categoryId: z.string().min(1),
+  q: z.string().max(120).optional(),
+  limit: z.coerce.number().int().min(1).max(10).optional(),
 });
 
 type RawBusiness = {
@@ -252,6 +309,345 @@ router.patch(
       }
       throw error;
     }
+  })
+);
+
+router.get(
+  "/categories",
+  requireApprovedBusiness,
+  asyncHandler(async (req, res) => {
+    const categories = await prisma.category.findMany({
+      where: { businessId: req.business!.id },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    });
+    sendSuccess(res, { categories });
+  })
+);
+
+router.get(
+  "/menu-suggestions/categories",
+  requireApprovedBusiness,
+  asyncHandler(async (req, res) => {
+    const categories = await prisma.category.findMany({
+      where: { businessId: req.business!.id },
+      select: { name: true },
+    });
+    const suggestions = suggestCategories(
+      categories.map((category: { name: string }) => category.name)
+    );
+    sendSuccess(res, { suggestions });
+  })
+);
+
+router.get(
+  "/menu-suggestions/items",
+  requireApprovedBusiness,
+  asyncHandler(async (req, res) => {
+    const parsed = menuItemSuggestionQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      sendError(res, parsed.error.message, 400, "VALIDATION_ERROR");
+      return;
+    }
+
+    const category = await prisma.category.findFirst({
+      where: { id: parsed.data.categoryId, businessId: req.business!.id },
+      select: { id: true, name: true },
+    });
+    if (!category) {
+      sendError(res, "Category not found", 404, "CATEGORY_NOT_FOUND");
+      return;
+    }
+
+    const existingItems = await prisma.menuItem.findMany({
+      where: { businessId: req.business!.id, categoryId: category.id },
+      select: { name: true },
+    });
+
+    const suggestions = await getMenuItemSuggestions({
+      categoryName: category.name,
+      existingItemNames: existingItems.map((item: { name: string }) => item.name),
+      typedQuery: parsed.data.q,
+      limit: parsed.data.limit ?? 5,
+    });
+    sendSuccess(res, { suggestions });
+  })
+);
+
+router.post(
+  "/categories",
+  requireApprovedBusiness,
+  asyncHandler(async (req, res) => {
+    const parsed = categoryCreateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(res, parsed.error.message, 400, "VALIDATION_ERROR");
+      return;
+    }
+    const max = await prisma.category.aggregate({
+      where: { businessId: req.business!.id },
+      _max: { sortOrder: true },
+    });
+    try {
+      const category = await prisma.category.create({
+        data: {
+          businessId: req.business!.id,
+          name: parsed.data.name,
+          sortOrder: (max._max.sortOrder ?? -1) + 1,
+        },
+      });
+      sendSuccess(res, { category }, 201);
+      return;
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        sendError(res, "Category name already exists", 409, "CATEGORY_EXISTS");
+        return;
+      }
+      throw error;
+    }
+  })
+);
+
+router.patch(
+  "/categories/:id",
+  requireApprovedBusiness,
+  asyncHandler(async (req, res) => {
+    const parsed = categoryUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(res, parsed.error.message, 400, "VALIDATION_ERROR");
+      return;
+    }
+    const id = req.params.id;
+    const existing = await prisma.category.findFirst({
+      where: { id, businessId: req.business!.id },
+    });
+    if (!existing) {
+      sendError(res, "Category not found", 404, "CATEGORY_NOT_FOUND");
+      return;
+    }
+    try {
+      const category = await prisma.category.update({
+        where: { id: existing.id },
+        data: parsed.data,
+      });
+      sendSuccess(res, { category });
+      return;
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        sendError(res, "Category name already exists", 409, "CATEGORY_EXISTS");
+        return;
+      }
+      throw error;
+    }
+  })
+);
+
+router.post(
+  "/categories/reorder",
+  requireApprovedBusiness,
+  asyncHandler(async (req, res) => {
+    const parsed = categoryReorderSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(res, parsed.error.message, 400, "VALIDATION_ERROR");
+      return;
+    }
+    await prisma.$transaction(
+      parsed.data.orders.map((item) =>
+        prisma.category.updateMany({
+          where: { id: item.id, businessId: req.business!.id },
+          data: { sortOrder: item.sortOrder },
+        })
+      )
+    );
+    sendSuccess(res, { updated: parsed.data.orders.length });
+  })
+);
+
+router.delete(
+  "/categories/:id",
+  requireApprovedBusiness,
+  asyncHandler(async (req, res) => {
+    const id = req.params.id;
+    const existing = await prisma.category.findFirst({
+      where: { id, businessId: req.business!.id },
+    });
+    if (!existing) {
+      sendError(res, "Category not found", 404, "CATEGORY_NOT_FOUND");
+      return;
+    }
+
+    const linkedItems = await prisma.menuItem.count({
+      where: { categoryId: existing.id, businessId: req.business!.id },
+    });
+    if (linkedItems > 0) {
+      sendError(
+        res,
+        "Cannot delete non-empty category",
+        409,
+        "CATEGORY_NOT_EMPTY"
+      );
+      return;
+    }
+
+    await prisma.category.delete({ where: { id: existing.id } });
+    sendSuccess(res, { deleted: true });
+  })
+);
+
+router.get(
+  "/menu-items",
+  requireApprovedBusiness,
+  asyncHandler(async (req, res) => {
+    const parsed = menuItemListQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      sendError(res, parsed.error.message, 400, "VALIDATION_ERROR");
+      return;
+    }
+    const { page, limit } = parsed.data;
+    const skip = (page - 1) * limit;
+    const [total, items] = await prisma.$transaction([
+      prisma.menuItem.count({ where: { businessId: req.business!.id } }),
+      prisma.menuItem.findMany({
+        where: { businessId: req.business!.id },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    sendSuccess(res, { items, page, limit, total });
+  })
+);
+
+router.post(
+  "/menu-items",
+  requireApprovedBusiness,
+  asyncHandler(async (req, res) => {
+    const parsed = menuItemCreateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(res, parsed.error.message, 400, "VALIDATION_ERROR");
+      return;
+    }
+    const category = await prisma.category.findFirst({
+      where: { id: parsed.data.categoryId, businessId: req.business!.id },
+    });
+    if (!category) {
+      sendError(res, "Category not found", 404, "CATEGORY_NOT_FOUND");
+      return;
+    }
+    const max = await prisma.menuItem.aggregate({
+      where: { businessId: req.business!.id },
+      _max: { sortOrder: true },
+    });
+    const item = await prisma.menuItem.create({
+      data: {
+        businessId: req.business!.id,
+        categoryId: parsed.data.categoryId,
+        name: parsed.data.name,
+        description: parsed.data.description ?? null,
+        price: parsed.data.price,
+        imageUrl: parsed.data.imageUrl ?? null,
+        dietaryTags: parsed.data.dietaryTags ?? [],
+        isAvailable: parsed.data.isAvailable ?? true,
+        sortOrder: (max._max.sortOrder ?? -1) + 1,
+      },
+    });
+    sendSuccess(res, { item }, 201);
+  })
+);
+
+router.patch(
+  "/menu-items/:id",
+  requireApprovedBusiness,
+  asyncHandler(async (req, res) => {
+    const parsed = menuItemUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(res, parsed.error.message, 400, "VALIDATION_ERROR");
+      return;
+    }
+    const id = req.params.id;
+    const existing = await prisma.menuItem.findFirst({
+      where: { id, businessId: req.business!.id },
+    });
+    if (!existing) {
+      sendError(res, "Menu item not found", 404, "MENU_ITEM_NOT_FOUND");
+      return;
+    }
+    if (parsed.data.categoryId) {
+      const category = await prisma.category.findFirst({
+        where: { id: parsed.data.categoryId, businessId: req.business!.id },
+      });
+      if (!category) {
+        sendError(res, "Category not found", 404, "CATEGORY_NOT_FOUND");
+        return;
+      }
+    }
+    const item = await prisma.menuItem.update({
+      where: { id: existing.id },
+      data: parsed.data,
+    });
+    sendSuccess(res, { item });
+  })
+);
+
+router.post(
+  "/menu-items/reorder",
+  requireApprovedBusiness,
+  asyncHandler(async (req, res) => {
+    const parsed = menuItemReorderSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(res, parsed.error.message, 400, "VALIDATION_ERROR");
+      return;
+    }
+    await prisma.$transaction(
+      parsed.data.orders.map((item) =>
+        prisma.menuItem.updateMany({
+          where: { id: item.id, businessId: req.business!.id },
+          data: { sortOrder: item.sortOrder },
+        })
+      )
+    );
+    sendSuccess(res, { updated: parsed.data.orders.length });
+  })
+);
+
+router.patch(
+  "/menu-items/:id/availability",
+  requireApprovedBusiness,
+  asyncHandler(async (req, res) => {
+    const parsed = menuItemAvailabilitySchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(res, parsed.error.message, 400, "VALIDATION_ERROR");
+      return;
+    }
+    const id = req.params.id;
+    const existing = await prisma.menuItem.findFirst({
+      where: { id, businessId: req.business!.id },
+    });
+    if (!existing) {
+      sendError(res, "Menu item not found", 404, "MENU_ITEM_NOT_FOUND");
+      return;
+    }
+    const item = await prisma.menuItem.update({
+      where: { id: existing.id },
+      data: { isAvailable: parsed.data.isAvailable },
+    });
+    sendSuccess(res, { item });
+  })
+);
+
+router.delete(
+  "/menu-items/:id",
+  requireApprovedBusiness,
+  asyncHandler(async (req, res) => {
+    const id = req.params.id;
+    const existing = await prisma.menuItem.findFirst({
+      where: { id, businessId: req.business!.id },
+    });
+    if (!existing) {
+      sendError(res, "Menu item not found", 404, "MENU_ITEM_NOT_FOUND");
+      return;
+    }
+    await prisma.menuItem.delete({ where: { id: existing.id } });
+    sendSuccess(res, { deleted: true });
   })
 );
 

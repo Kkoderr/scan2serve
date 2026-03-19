@@ -43,4 +43,23 @@ describe("apiFetch", () => {
 
     await expect(apiFetch("/api/fail")).rejects.toThrow("Bad");
   });
+
+  it("preserves default content-type when custom headers are provided", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValue(makeResponse({ status: 1, data: { ok: true } }));
+
+    await apiFetch<{ ok: boolean }>("/api/business/categories", {
+      method: "POST",
+      headers: {
+        "x-business-id": "b_1",
+      },
+      body: JSON.stringify({ name: "Starters" }),
+    });
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const headers = init.headers as Record<string, string>;
+    expect(headers["Content-Type"]).toBe("application/json");
+    expect(headers["x-business-id"]).toBe("b_1");
+  });
 });

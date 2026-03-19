@@ -4,13 +4,16 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
+  const adminSeedEmail = process.env.ADMIN_SEED_EMAIL || "admin@scan2serve.com";
+  const adminSeedPassword = process.env.ADMIN_SEED_PASSWORD || "admin123";
+
   // Create admin user
-  const adminPassword = await bcrypt.hash("admin123", 10);
+  const adminPassword = await bcrypt.hash(adminSeedPassword, 10);
   await prisma.user.upsert({
-    where: { email: "admin@scan2serve.com" },
+    where: { email: adminSeedEmail },
     update: {},
     create: {
-      email: "admin@scan2serve.com",
+      email: adminSeedEmail,
       passwordHash: adminPassword,
       role: "admin",
     },
@@ -69,7 +72,7 @@ async function main() {
     },
   });
 
-  console.log("Seed complete: admin + QR seed context ready");
+  console.log(`Seed complete: admin (${adminSeedEmail}) + QR seed context ready`);
 }
 
 main()

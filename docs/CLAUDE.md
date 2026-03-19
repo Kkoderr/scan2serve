@@ -22,3 +22,12 @@ Project documentation for architecture decisions, process notes, and operational
 - ADR-006 endpoint policy update: keep shared auth endpoints (`/api/auth/login` + `/api/auth/register`); distinguish QR customer auth by required hashed `qrToken` context rather than separate QR API endpoints.
 - ADR-006 refreshed with current context snapshot and acceptance criteria: no customer auth in main website routes, tamper rejection via `403 CUSTOMER_AUTH_QR_ONLY`, shared auth endpoints with required QR token for customer role, and strict cookie/session isolation from business auth.
 - ADR-006 accepted: QR-scoped customer auth now uses shared auth endpoints with required `qrToken` for customer role; open-question defaults were adopted for implementation baseline.
+- Added ADR-007 (Proposed) for Layer 4 Menu Management to define category/menu-item CRUD scope, reorder semantics, availability toggling, and required API/web test coverage before implementation.
+- ADR-007 is now accepted and Layer 4 implementation has started (business category/menu-item API endpoints plus dashboard menu UI baseline).
+
+## Updates 2026-03-20
+- Added ADR-008 (Accepted) to define root-route redirect behavior and `/home` landing split (`/` redirect gate, `/home` public landing).
+- Added ADR-009 (Accepted) to standardize API logging with a singleton logger and structured request/error lifecycle events.
+- Added ADR-010 (Accepted) for subtle AI-assisted menu authoring: top-5 category/item suggestions (excluding existing entries), dietary-tag auto-fill from selected suggestions, and visible dietary-tag display in dashboard menu list.
+- Added ADR-011 (Accepted) to evolve ADR-010 suggestions into LLM-driven, context-aware top-5 recommendations with typed-text autocomplete and deterministic fallback.
+- ADR-011 was refined to enforce singleton AI model/client instantiation per API process and to use dedicated AI endpoint namespace (`/api/ai/menu/item-suggestions`).

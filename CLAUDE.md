@@ -323,3 +323,27 @@ Build features in this order. Each layer depends on the layers above it.
 - Additional ADR-006 auth hardening: mixed refresh-cookie requests are explicitly rejected and QR auth now enforces business/table availability before allowing customer auth.
 - ADR-006 lifecycle step added: business-side QR token regeneration endpoint now rotates table QR tokens, invalidating previous tokens by replacement.
 - ADR-006 optional lifecycle enhancements implemented: QR rotation audit records + table rotation-history endpoint + optional old-token grace-window resolution in public QR lookup.
+- ADR-007 accepted and Layer 4 started with business menu/category endpoint implementation plus `/dashboard/menu` UI baseline.
+
+## Updates 2026-03-20
+- Added a queued infra follow-up in `STATUS.md` next-step list to move Docker/web health probes from `/` to `/healthz` to reduce noisy root endpoint request logs.
+- Infra follow-up completed: API (`apps/api/src/index.ts`) and web (`apps/web/src/app/healthz/route.ts`) now expose `/healthz`, and `docker-compose.yml` healthchecks target those endpoints.
+- Layer 4 dashboard menu parity moved forward: added category rename/delete/reorder, menu item edit/delete, and pagination controls in `apps/web/src/app/dashboard/menu/page.tsx`.
+- Verification for this pass is green: `pnpm --filter @scan2serve/api test`, `pnpm --filter @scan2serve/web test`, and both app builds pass.
+- Owner admin-access policy update: no dedicated public admin button/route on homepage; admin users must use standard login and are redirected to `/admin` by role.
+- Admin seed credentials were made configurable through API env vars (`ADMIN_SEED_EMAIL`, `ADMIN_SEED_PASSWORD`) so they can be changed without code edits.
+- Layer 4 test-depth pass completed: added API coverage for duplicate category + menu-item update validation errors and web coverage for menu item edit/delete + blocked-business behavior.
+- Local env note: `apps/api/.env` should exist (copied from `.env.example`) for direct local seed/migration commands; otherwise pass `DATABASE_URL` inline.
+- Root routing policy update: `/` is now a redirect-only entrypoint in web app, sending authenticated users by role (`/dashboard` for business, `/admin` for admin) and unauthenticated/invalid sessions to `/home`.
+- Root redirect implementation uses `/api/auth/me` with `/api/auth/refresh` fallback when refresh cookie exists, reducing false unauthenticated redirects for valid sessions with expired access tokens.
+- Public landing page content was moved from `/` to `/home`; keep future marketing/unauthenticated landing updates on `/home` and preserve root redirect semantics.
+- Logout UX alignment: dashboard/admin protected pages now send unauthenticated users to `/home` (not `/login`) so logout consistently lands on public home.
+- API logging policy update: backend logs should go through singleton `logger` (`apps/api/src/utils/logger.ts`) with structured lifecycle events (`http.request.start|finish|aborted|error`) instead of direct `console.*` calls.
+- Business routing safeguard: when business context is not explicitly provided, API business resolution should prefer an `approved` business profile over pending/rejected profiles to keep menu operations functional.
+- Web API client safeguard: always preserve `Content-Type: application/json` when sending requests with custom headers, otherwise Express JSON parsing may fail and category creation can return 400.
+- AI-assist note: ADR-010 is now implemented with subtle menu-authoring assistance (top-5 category/item suggestions excluding existing entries, dietary-tag auto-fill on suggestion select, and visible dietary-tag badges in menu list).
+- AI-assist roadmap: ADR-011 proposes upgrading menu suggestions to LLM-driven ranking with typed-input autocomplete (`q`), while retaining deterministic fallback for reliability.
+- ADR-011 is now accepted and implemented in API with a singleton LLM client/model-handle pattern and dedicated AI route namespace (`/api/ai/*`) for ongoing AI task expansion.
+- LLM timeout behavior is intentionally graceful: aborted calls should log as timeout metadata and continue via deterministic fallback (avoid noisy error-stack logs for expected timeout fallbacks).
+- AI suggestion quality guard: generate a wider LLM candidate pool and trim after exclusion/ranking to avoid repeated top-5-only outputs drying up as menus grow.
+- Dashboard UX guard: when fetching typed-query suggestions, clear stale chips during the request; category switches must trigger category-specific suggestion refresh.

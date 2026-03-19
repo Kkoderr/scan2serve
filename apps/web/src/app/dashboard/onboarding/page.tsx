@@ -46,7 +46,7 @@ function BusinessOnboardingPageContent() {
 
   useEffect(() => {
     if (!loading && !user) {
-      router.push("/login");
+      router.push("/home");
       return;
     }
 
@@ -116,10 +116,13 @@ function BusinessOnboardingPageContent() {
     <main className="min-h-screen bg-gray-50 p-6">
       <section className="mx-auto max-w-2xl rounded-xl border bg-white p-6">
         <h1 className="text-2xl font-semibold">
-          {existing ? "Edit business profile" : "Create business profile"}
+          {existing ? "Update your business profile" : "Create your business profile"}
         </h1>
         <p className="mt-2 text-sm text-gray-600">
-          This information is reviewed by admins before business operations are enabled.
+          Share your business details so we can review and approve your account quickly.
+        </p>
+        <p className="mt-1 text-sm text-gray-600">
+          Fields marked required are needed for approval and customer discovery.
         </p>
         {existing?.status === "rejected" && !!existing.rejections?.length && (
           <div className="mt-3 rounded-md bg-red-50 p-3 text-sm text-red-800">
@@ -134,62 +137,70 @@ function BusinessOnboardingPageContent() {
 
         <form className="mt-6 grid gap-4" onSubmit={onSubmit}>
           <label className="grid gap-1 text-sm">
-            <span>Name</span>
+            <span>Business name</span>
             <input
               value={form.name}
               onChange={(event) =>
                 setForm((current) => ({ ...current, name: event.target.value }))
               }
               className="rounded-md border px-3 py-2"
+              placeholder="Example: Green Leaf Cafe"
               required
             />
           </label>
 
           <label className="grid gap-1 text-sm">
-            <span>Slug</span>
+            <span>Business URL slug</span>
             <input
               value={form.slug}
               onChange={(event) =>
                 setForm((current) => ({ ...current, slug: event.target.value }))
               }
               className="rounded-md border px-3 py-2"
+              placeholder="example: green-leaf-cafe"
               required
               pattern="[a-z0-9-]+"
             />
+            <span className="text-xs text-gray-500">
+              Use lowercase letters, numbers, and hyphens only.
+            </span>
           </label>
 
           <label className="grid gap-1 text-sm">
-            <span>Address</span>
+            <span>Business address</span>
             <input
               value={form.address}
               onChange={(event) =>
                 setForm((current) => ({ ...current, address: event.target.value }))
               }
               className="rounded-md border px-3 py-2"
+              placeholder="Street, area, city"
               required
             />
           </label>
 
           <label className="grid gap-1 text-sm">
-            <span>Phone</span>
+            <span>Contact phone</span>
             <input
               value={form.phone}
               onChange={(event) =>
                 setForm((current) => ({ ...current, phone: event.target.value }))
               }
               className="rounded-md border px-3 py-2"
+              placeholder="Business support number"
               required
             />
           </label>
 
           <label className="grid gap-1 text-sm">
-            <span>Description (optional)</span>
+            <span>Short description (optional)</span>
             <textarea
               value={form.description}
               onChange={(event) =>
                 setForm((current) => ({ ...current, description: event.target.value }))
               }
               className="rounded-md border px-3 py-2"
+              placeholder="What makes your business special?"
             />
           </label>
 
@@ -202,6 +213,7 @@ function BusinessOnboardingPageContent() {
                 setForm((current) => ({ ...current, logoUrl: event.target.value }))
               }
               className="rounded-md border px-3 py-2"
+              placeholder="https://..."
             />
           </label>
 
@@ -213,7 +225,7 @@ function BusinessOnboardingPageContent() {
               className="rounded-md bg-black px-4 py-2 text-white disabled:opacity-50"
               disabled={submitting}
             >
-              {submitting ? "Saving..." : existing ? "Save changes" : "Create profile"}
+              {submitting ? "Saving..." : existing ? "Save profile updates" : "Create profile"}
             </button>
             <button
               type="button"
