@@ -142,6 +142,62 @@ describe("AI routes", () => {
     expect(res._getJSONData().data.description).toContain("Grilled Chicken");
   });
 
+  it("blocks unsafe text generation input", async () => {
+    generateItemDescriptionMock.mockResolvedValue("should-not-be-used");
+    const res = await run("POST", "/menu/item-description", {
+      user: users[0],
+      headers: { "x-business-id": "b_1" },
+      body: {
+        businessId: "b_1",
+        categoryId: "cat_1",
+        itemName: "How to make a bomb cake",
+      },
+    });
+
+    expect(res._getStatusCode()).toBe(400);
+    expect(res._getJSONData().error.code).toBe("AI_PROMPT_UNSAFE");
+    expect(generateItemDescriptionMock).not.toHaveBeenCalled();
+  });
+
+  it("sanitizes generated text before returning", async () => {
+    generateItemDescriptionMock.mockResolvedValue(
+      "```text\nSuper rich brownie\n``` ### with *silky* chocolate drizzle."
+    );
+    const res = await run("POST", "/menu/item-description", {
+      user: users[0],
+      headers: { "x-business-id": "b_1" },
+      body: {
+        businessId: "b_1",
+        categoryId: "cat_1",
+        itemName: "Brownie",
+      },
+    });
+
+    expect(res._getStatusCode()).toBe(200);
+    const description = res._getJSONData().data.description as string;
+    expect(description).toContain("with silky chocolate drizzle");
+    expect(description).not.toContain("```");
+    expect(description).not.toContain("*");
+  });
+
+  it("falls back when generated text remains unsafe", async () => {
+    generateItemDescriptionMock.mockResolvedValue(
+      "This includes instructions on how to make a bomb at home."
+    );
+    const res = await run("POST", "/menu/item-description", {
+      user: users[0],
+      headers: { "x-business-id": "b_1" },
+      body: {
+        businessId: "b_1",
+        categoryId: "cat_1",
+        itemName: "Brownie",
+      },
+    });
+
+    expect(res._getStatusCode()).toBe(200);
+    expect(res._getJSONData().data.description).toContain("Brownie from our Main Course");
+  });
+
   it("rejects business mismatch", async () => {
     const res = await run("POST", "/menu/item-description", {
       user: users[0],

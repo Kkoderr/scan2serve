@@ -3,10 +3,16 @@ import { z } from "zod";
 import { prisma } from "../prisma";
 import { asyncHandler } from "../utils/asyncHandler";
 import { sendError, sendSuccess } from "../utils/response";
+import { logger } from "../utils/logger";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { requireApprovedBusiness } from "../middleware/businessApproval";
 import { getMenuItemSuggestions } from "../services/llmMenuSuggestions";
 import { getLlmClient } from "../services/llmClient";
+import {
+  checkGenerationInputSafety,
+  checkUnsafeContent,
+  sanitizeGeneratedText,
+} from "../services/aiGuardrails";
 
 const router: express.Router = express.Router();
 
@@ -108,6 +114,21 @@ router.post(
     }
 
     const llm = getLlmClient();
+    const inputGuard = checkGenerationInputSafety([
+      parsed.data.itemName,
+      ...(parsed.data.dietaryTags ?? []),
+      parsed.data.tone,
+    ]);
+    if (!inputGuard.safe) {
+      logger.warn("ai.guardrail.blocked_input", {
+        route: "/api/ai/menu/item-description",
+        businessId: req.business!.id,
+        category: inputGuard.category,
+      });
+      sendError(res, "Prompt content is not allowed", 400, "AI_PROMPT_UNSAFE");
+      return;
+    }
+
     const description = await llm.generateItemDescription({
       categoryName: category.name,
       itemName: parsed.data.itemName,
@@ -115,14 +136,19 @@ router.post(
       tone: parsed.data.tone,
     });
 
+    const normalizedDescription = description ? sanitizeGeneratedText(description, 300) : null;
+    const outputUnsafe =
+      normalizedDescription && checkUnsafeContent(normalizedDescription).unsafe;
+
     sendSuccess(res, {
       description:
-        description ??
-        buildFallbackDescription({
-          itemName: parsed.data.itemName,
-          categoryName: category.name,
-          dietaryTags: parsed.data.dietaryTags ?? [],
-        }),
+        normalizedDescription && !outputUnsafe
+          ? normalizedDescription
+          : buildFallbackDescription({
+              itemName: parsed.data.itemName,
+              categoryName: category.name,
+              dietaryTags: parsed.data.dietaryTags ?? [],
+            }),
     });
   })
 );

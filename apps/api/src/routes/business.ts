@@ -12,6 +12,7 @@ import { requireApprovedBusiness, resolveBusinessForUser } from "../middleware/b
 import { suggestCategories } from "../services/menuSuggestions";
 import { getMenuItemSuggestions } from "../services/llmMenuSuggestions";
 import { generateMenuItemImage } from "../services/aiImageProvider";
+import { checkGenerationInputSafety } from "../services/aiGuardrails";
 import {
   extractImagePathFromUrl,
   resolveImageUrl,
@@ -1150,6 +1151,17 @@ router.post(
     const prompt =
       parsed.data.prompt?.trim() ||
       `Food product photo of ${existing.name} in ${existing.category.name} style, realistic lighting, high detail`;
+    const inputGuard = checkGenerationInputSafety([prompt, existing.name, existing.category.name]);
+    if (!inputGuard.safe) {
+      logger.warn("ai.guardrail.blocked_input", {
+        route: "/api/business/menu-items/:id/image/generate",
+        businessId: req.business!.id,
+        category: inputGuard.category,
+      });
+      sendError(res, "Prompt content is not allowed", 400, "AI_PROMPT_UNSAFE");
+      return;
+    }
+
     const generated = await generateMenuItemImage({
       prompt,
       itemName: existing.name,
