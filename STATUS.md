@@ -11,26 +11,30 @@
 
 **Date:** 2026-03-20
 **What was done:**
-- Added archived-view action guard on dashboard:
-  - when `Show archived` is enabled, hide quick action cards/options (`Manage menu`, `Edit details`, `Archive business`).
-- Keeps archived view focused on archived-business browsing without active management controls.
-- Updated dashboard test to assert quick actions are hidden in archived mode.
-- Revalidated web tests:
-  - `pnpm --filter @scan2serve/web test` passes (`30/30`).
+- Accepted ADR-022 and moved menu image generation runtime to Gemini-only.
+- Removed Nano-Banana/provider-switch implementation from `apps/api/src/services/aiImageProvider.ts`; generation now always uses Gemini REST path.
+- Removed stale provider env surface from API config and compose:
+  - removed `AI_IMAGE_PROVIDER`, `NANOBANANA_API_URL`, `NANOBANANA_API_KEY`, `NANOBANANA_MODEL`,
+  - kept Gemini keys (`GEMINI_API_KEY`, `GEMINI_API_URL`, `GEMINI_IMAGE_MODEL`) + timeout.
+- Updated provider tests in `apps/api/tests/aiImageProvider.test.ts` to validate Gemini-only behavior.
+- Fixed docker env loading issue for Gemini key by adding `env_file: ./apps/api/.env` to API service and removing hardcoded empty `GEMINI_API_KEY` compose override.
+- Recreated API container and verified runtime Gemini env is loaded from `.env`.
+- Revalidated API suite:
+  - `pnpm --filter @scan2serve/api test` passes (`57/57`).
 
 **What's NOT done yet:**
-- Local runtime validation with real Nano-Banana credentials is still pending (env placeholders are set, provider key/url not configured).
-- Image moderation/quality guardrails for generated images are still minimal and should be hardened.
+- ADR-019 (Layer 5) is still Proposed; table/QR implementation has not started.
+- End-to-end live verification of Gemini image generation response quality is still pending.
 - Cleanup queue monitoring endpoint/dashboard is not implemented yet (logs-only observability).
 - Layer 5+ features (tables/QR advanced flows, ordering/payments, dashboards) remain pending.
 - Production cookie/CORS hardening review still pending once deploy targets are fixed.
 - UI professionalism polish pass is deferred until QR scanning and end-to-end customer flows are fully in place (current redesign kept as interim baseline).
 
-**Next step:** Start Layer 5 (Table + QR management completion)
-1. Replace placeholder business table endpoints with full CRUD/list behavior and ownership/status gating.
-2. Implement dashboard table-management UI (bulk create, edit labels, activate/deactivate, regenerate QR).
-3. Add QR download/export flows and route-level + UI test coverage for Layer 5 contracts.
-4. Keep archive/deleted-asset cleanup observability follow-ups queued after Layer 5 baseline lands.
+**Next step:** Get ADR-019 approval, then implement Layer 5
+1. Approve ADR-019 (table + QR scope/contracts).
+2. Replace placeholder table endpoints with full Layer 5 API behavior.
+3. Implement `/dashboard/tables` UI for bulk create, edits/toggles, regenerate, and QR downloads.
+4. Add API/web tests for Layer 5 flows and keep cleanup-observability follow-ups queued after baseline lands.
 
 **Build progress:**
 ```
@@ -530,6 +534,37 @@ Layer 11: Polish & Deploy
 - Updated dashboard tests to assert action absence in archived mode.
 - Revalidated web suite: `pnpm --filter @scan2serve/web test` (30/30 passing).
 
+### 2026-03-20 — Session 78: ADR-019 drafted for Layer 5 Table + QR
+- Added `docs/adr/ADR-019-layer5-table-and-qr-management.md` with proposed Layer 5 contracts and test scope.
+- ADR-019 covers table lifecycle endpoints, QR regenerate/history continuity, and single/batch QR download exports.
+- No Layer 5 implementation code started yet; waiting for ADR approval before coding.
+
+### 2026-03-20 — Session 79: ADR-020 accepted + Gemini REST image runtime implementation
+- Added and accepted `docs/adr/ADR-020-gemini-image-runtime-for-non-banana-provider.md`.
+- Implemented Gemini REST provider path in `apps/api/src/services/aiImageProvider.ts` behind `AI_IMAGE_PROVIDER=gemini`.
+- Added Gemini env configuration to `apps/api/.env.example` (`GEMINI_API_KEY`, `GEMINI_API_URL`, `GEMINI_IMAGE_MODEL`).
+- Added provider-level tests in `apps/api/tests/aiImageProvider.test.ts`.
+- Verified API test suite: `pnpm --filter @scan2serve/api test` (50/50 passing).
+
+### 2026-03-20 — Session 80: ADR-021 accepted + AI guardrails for text/image generation
+- Added and accepted `docs/adr/ADR-021-ai-generation-guardrails.md`.
+- Added shared guardrail service (`apps/api/src/services/aiGuardrails.ts`) for unsafe-content detection and generated-text sanitization.
+- Enforced guardrails in `apps/api/src/routes/ai.ts` and `apps/api/src/routes/business.ts` for text and image generation endpoints.
+- Added API tests covering blocked unsafe prompts and safe/sanitized text fallback behavior.
+- Verified API test suite: `pnpm --filter @scan2serve/api test` (57/57 passing).
+
+### 2026-03-20 — Session 81: ADR-022 accepted + Gemini-only image runtime
+- Added and accepted `docs/adr/ADR-022-gemini-only-image-generation-runtime.md`; marked ADR-020 as superseded.
+- Removed Nano-Banana/provider-switch logic from `apps/api/src/services/aiImageProvider.ts`; menu image generation now always uses Gemini REST.
+- Cleaned runtime config in `apps/api/.env.example` and `docker-compose.yml` by removing `AI_IMAGE_PROVIDER` and `NANOBANANA_*` keys.
+- Updated provider tests (`apps/api/tests/aiImageProvider.test.ts`) to assert Gemini-only behavior.
+- Verified API test suite: `pnpm --filter @scan2serve/api test` (57/57 passing).
+
+### 2026-03-20 — Session 82: Docker compose env precedence fix for Gemini key
+- Diagnosed 503 image-generation failures as compose env precedence issue (`GEMINI_API_KEY` hardcoded empty in `docker-compose.yml`).
+- Added API `env_file` loading from `./apps/api/.env` and removed hardcoded empty `GEMINI_API_KEY` override.
+- Recreated API service and verified runtime env inside container includes non-empty `GEMINI_API_KEY`.
+
 ---
 
 ## Decisions Log
@@ -552,6 +587,10 @@ Layer 11: Polish & Deploy
 | ADR-016 | Onboarding auto-slug, currency input, and drag-drop logo upload | Remove manual slug edits, enforce server-side unique slug generation, collect currency, and replace logo URL field with uploaded image flow | 2026-03-20 |
 | ADR-017 | Dashboard logos + business archive lifecycle with 30-day retention delete | Improve dashboard identity using logos, replace destructive delete with reversible archive window, and enforce eventual hard delete with audit trail | 2026-03-20 |
 | ADR-018 | Sitewide public UI redesign with home/QR auth dialogs | Introduce structured public shell, home hero/profile sections, light visual system, and dialog-based auth UX while retaining fallback auth routes | 2026-03-20 |
+| ADR-019 | Layer 5 table + QR management contracts | Define implementation scope for table lifecycle, QR regeneration/history continuity, and QR download/export before Layer 5 coding | 2026-03-20 (Proposed) |
+| ADR-020 | Gemini REST runtime for non-banana image provider | Add production-grade non-banana image generation path using Gemini REST APIs while preserving provider-switch compatibility and graceful fallbacks | 2026-03-20 |
+| ADR-021 | Guardrails for text and image generation | Add shared backend AI guardrails to block unsafe prompts and sanitize generated menu text across generation endpoints | 2026-03-20 |
+| ADR-022 | Gemini-only image generation runtime | Simplify menu image generation by removing Nano-Banana/provider switching and standardizing on Gemini REST only | 2026-03-20 |
 
 ---
 

@@ -40,6 +40,8 @@ services:
     image: node:20-alpine
     container_name: scan2serve-api
     working_dir: /app
+    env_file:
+      - ./apps/api/.env
     volumes:
       - ./:/app
       - api-node-modules:/app/node_modules
@@ -64,11 +66,9 @@ services:
       S3_FORCE_PATH_STYLE: "true"
       MENU_IMAGE_MAX_BYTES: 5242880
       BUSINESS_LOGO_MAX_BYTES: 3145728
-      AI_IMAGE_PROVIDER: nano-banana
-      AI_IMAGE_TIMEOUT_MS: 12000
-      NANOBANANA_API_URL: ""
-      NANOBANANA_API_KEY: ""
-      NANOBANANA_MODEL: nano-banana-v1
+      AI_IMAGE_TIMEOUT_MS: 30000
+      GEMINI_API_URL: https://generativelanguage.googleapis.com/v1beta
+      GEMINI_IMAGE_MODEL: gemini-3-pro-image-preview
       ENABLE_DELETED_ASSET_CLEANUP: "true"
       DELETED_ASSET_CLEANUP_INTERVAL_MS: 600000
       DELETED_ASSET_CLEANUP_BATCH_SIZE: 20

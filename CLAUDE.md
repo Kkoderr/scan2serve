@@ -469,3 +469,7 @@ This section is the high-level source of truth for what is already implemented a
 - Dashboard action controls now include an `Edit details` action beside archive in the right quick-action area, routing to onboarding edit for selected business.
 - Business profile edit policy in web UI now locks `name` alongside immutable slug; edit mode updates only non-name profile fields.
 - Dashboard archived-view policy: enabling `Show archived` hides non-archived operational quick actions (menu/edit/archive) so archived browsing is read-only focused.
+- ADR-019 drafted as Proposed for Layer 5: table lifecycle + QR management (bulk table creation, table updates/toggles, QR regenerate/history, and single/batch QR downloads) pending approval before implementation.
+- ADR-020 implemented Gemini provider-switch baseline; this decision is now superseded by ADR-022 (Gemini-only runtime).
+- ADR-021 accepted and implemented: API now enforces shared AI guardrails across both text and image generation routes, blocking unsafe prompts with `AI_PROMPT_UNSAFE` and sanitizing generated descriptions before response/fallback.
+- ADR-022 accepted and implemented: menu image generation is now Gemini-only; Nano-Banana/provider-switch paths were removed from backend runtime and env configuration.

@@ -132,3 +132,12 @@ pnpm db:studio    # open Prisma Studio GUI
   - Category/item reorder endpoints now normalize `sortOrder` to contiguous `0..N-1` values using payload order.
   - Reorder payload validation now rejects duplicate IDs.
 - Added API regression coverage in `tests/menuRoutes.test.ts` for category-filtered item listing and contiguous reorder normalization behavior.
+- ADR-020 established Gemini provider-switch support in `src/services/aiImageProvider.ts`; this path is now superseded by ADR-022 (Gemini-only runtime).
+- Added Gemini provider env variables to `.env.example`: `GEMINI_API_KEY`, `GEMINI_API_URL`, `GEMINI_IMAGE_MODEL`.
+- Added provider-level tests in `tests/aiImageProvider.test.ts` covering Gemini success path, missing-config handling, and unsupported-provider fallback behavior.
+- ADR-021 accepted and implemented: added shared AI guardrail service (`src/services/aiGuardrails.ts`) with deterministic unsafe-content checks and generated-text sanitization helpers.
+- Guardrails are now enforced in text and image generation routes (`src/routes/ai.ts`, `src/routes/business.ts`) with `AI_PROMPT_UNSAFE` request blocking and sanitized/fallback-safe text descriptions.
+- Added regression tests in `tests/aiRoutes.test.ts`, `tests/menuRoutes.test.ts`, and `tests/aiGuardrails.test.ts` for unsafe-input rejection and text sanitization behavior.
+- ADR-022 accepted and implemented: menu image generation runtime is now Gemini-only in `src/services/aiImageProvider.ts`; Nano-Banana/provider-switch branches were removed.
+- Runtime config cleanup: removed `AI_IMAGE_PROVIDER` and `NANOBANANA_*` expectations from API env surface; image generation now depends on `GEMINI_API_KEY`, `GEMINI_API_URL`, `GEMINI_IMAGE_MODEL`, `AI_IMAGE_TIMEOUT_MS`.
+- Docker runtime note: for local compose, API now reads `./apps/api/.env` via `env_file`; avoid setting `GEMINI_API_KEY: ""` in compose `environment` because it overrides env-file values and causes immediate `AI_IMAGE_GENERATION_FAILED` responses.

@@ -40,3 +40,7 @@ Project documentation for architecture decisions, process notes, and operational
 - Added ADR-016 (Accepted): onboarding now uses server-side auto-generated immutable slugs, requires currency input, and replaces logo URL entry with drag-drop logo upload.
 - Added ADR-017 (Accepted): dashboard business cards use logos, business delete flow is replaced with archive+confirm behavior, restore is allowed within retention window, and archived businesses are auto-deleted after 30 days with audit logging.
 - Added ADR-018 (Accepted): sitewide public UI redesign with explicit header/body/footer shell, home hero + authenticated profile section, dialog-based auth UX on home/QR pages, and light-theme visual system refresh.
+- Added ADR-019 (Proposed): Layer 5 table + QR management contract covering table bulk-create/list/update/toggle, QR regenerate/history continuity, and single/batch QR download export scope.
+- Added ADR-020 (Accepted at the time) as the initial Gemini provider-switch path; this is now superseded by ADR-022 (Gemini-only runtime).
+- Added ADR-021 (Accepted): text/image generation now share backend guardrails for unsafe prompt blocking and generated-text sanitization/fallback safety.
+- Added ADR-022 (Accepted): menu image generation runtime is now Gemini-only; legacy Nano-Banana/provider-switch implementation has been removed.
