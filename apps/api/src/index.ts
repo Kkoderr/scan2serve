@@ -10,6 +10,7 @@ import publicRoutes from "./routes/public";
 import aiRoutes from "./routes/ai";
 import { logger } from "./utils/logger";
 import { startDeletedAssetCleanupWorker } from "./services/deletedAssetCleanup";
+import { startArchivedBusinessCleanupWorker } from "./services/archivedBusinessCleanup";
 
 const app: express.Express = express();
 const PORT = process.env.PORT || 4000;
@@ -136,6 +137,7 @@ app.use(
 // ─── Start ──────────────────────────────────────────────────
 if (process.env.NODE_ENV !== "test") {
   startDeletedAssetCleanupWorker();
+  startArchivedBusinessCleanupWorker();
   app.listen(PORT, () => {
     logger.info("api.server.started", {
       port: Number(PORT),

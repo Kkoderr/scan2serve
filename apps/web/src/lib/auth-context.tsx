@@ -38,6 +38,8 @@ type AuthContextType = {
   selectBusiness: (businessId: string) => void;
   createBusinessProfile: (input: CreateBusinessProfileInput) => Promise<BusinessProfile>;
   updateBusinessProfile: (input: UpdateBusinessProfileInput) => Promise<BusinessProfile>;
+  archiveBusinessProfile: (businessId: string) => Promise<BusinessProfile>;
+  restoreBusinessProfile: (businessId: string) => Promise<BusinessProfile>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -70,7 +72,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (current && data.businesses.some((business) => business.id === current)) {
           return current;
         }
-        return data.businesses[0].id;
+        const firstActive = data.businesses.find((business) => business.status !== "archived");
+        return firstActive?.id ?? data.businesses[0].id;
       });
     } catch {
       setBusinesses([]);
@@ -198,6 +201,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return data.business;
   };
 
+  const archiveBusinessProfile = async (businessId: string) => {
+    const data = await apiFetch<{ business: BusinessProfile }>("/api/business/profile/archive", {
+      method: "PATCH",
+      body: JSON.stringify({ businessId }),
+    });
+    await refreshBusinessProfiles();
+    return data.business;
+  };
+
+  const restoreBusinessProfile = async (businessId: string) => {
+    const data = await apiFetch<{ business: BusinessProfile }>("/api/business/profile/restore", {
+      method: "PATCH",
+      body: JSON.stringify({ businessId }),
+    });
+    await refreshBusinessProfiles();
+    return data.business;
+  };
+
   const selectedBusiness =
     businesses.find((business) => business.id === selectedBusinessId) ?? null;
 
@@ -218,6 +239,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     selectBusiness: setSelectedBusinessId,
     createBusinessProfile,
     updateBusinessProfile,
+    archiveBusinessProfile,
+    restoreBusinessProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

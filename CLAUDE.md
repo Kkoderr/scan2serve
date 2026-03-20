@@ -100,59 +100,78 @@ scan2serve/
 ```
 
 ### Monorepo Commands (from root)
-- `npm run dev` — starts both web and api in parallel
-- `npm run dev --workspace=apps/web` — start frontend only
-- `npm run dev --workspace=apps/api` — start backend only
-- `npm run build` — build all apps
-- `npm run lint` — lint all apps
+- `pnpm dev` — starts both web and api in parallel
+- `pnpm dev:web` — start frontend only
+- `pnpm dev:api` — start backend only
+- `pnpm build` — build all apps
+- `pnpm lint` — lint all apps
+- `pnpm --filter @scan2serve/api test` — run API tests
+- `pnpm --filter @scan2serve/web test` — run web tests
 - Shared package imported as `@scan2serve/shared` in both apps
 
 ## Database Schema
 
-- `users` — id, email, password_hash, role (customer|business|admin), created_at
-- `businesses` — id, user_id (FK), name, description, logo_url, address, phone, status (pending|approved|rejected), created_at
+- `users` — id, email, password_hash, role (customer|business|admin), created_at, updated_at
+- `businesses` — id, user_id (FK), name, slug, currency_code, description, logo_url, address, phone, status (pending|approved|rejected|archived), archived_at, archived_previous_status, created_at, updated_at
+- `business_rejections` — rejection history for businesses (reason + created_at)
 - `categories` — id, business_id (FK), name, sort_order
-- `menu_items` — id, category_id (FK), business_id (FK), name, description, price, image_url, is_available, dietary_tags[], sort_order
+- `menu_items` — id, category_id (FK), business_id (FK), name, description, price, image_path, is_available, dietary_tags[], sort_order
 - `tables` — id, business_id (FK), table_number (int, unique per business), label (optional), is_active, created_at
 - `qr_codes` — id, business_id (FK), table_id (FK), unique_code, qr_image_url, created_at
+- `qr_code_rotations` — tracks QR token regeneration with optional grace expiry
 - `orders` — id, business_id (FK), table_id (FK), status (pending|confirmed|preparing|ready|completed|cancelled), total_amount, stripe_payment_id, customer_name, customer_phone, created_at
 - `order_items` — id, order_id (FK), menu_item_id (FK), quantity, unit_price, special_instructions
+- `refresh_tokens` — hashed refresh token records with expiry/revocation state
+- `deleted_asset_cleanups` — retryable queue for deferred S3 object deletions
+- `archived_business_deletion_audits` — immutable audit records for retention-triggered archived business deletions
 
 ## API Endpoints
 
+Current API implementation (selected, high-signal routes):
+
 ### Auth
-- `POST /api/auth/register` — signup (business role → status=pending)
-- `POST /api/auth/login` — returns JWT
+- `POST /api/auth/register` — register business or QR-scoped customer
+- `POST /api/auth/login` — login with business/admin or QR-scoped customer constraints
+- `POST /api/auth/refresh` — rotate refresh token and re-issue cookies
+- `POST /api/auth/logout` — revoke refresh token and clear auth cookies
 - `GET  /api/auth/me` — current user profile
 
-### Business Menu
-- `GET    /api/business/menu` — categories + items for logged-in business
-- `POST/PUT/DELETE /api/business/categories`
-- `POST/PUT/DELETE /api/business/menu-items` — with image upload
+### Business Onboarding
+- `POST /api/business/profile` — create profile (slug auto-generated server-side)
+- `GET /api/business/profiles` — list current user business profiles
+- `GET /api/business/profile` — get resolved active profile
+- `PATCH /api/business/profile` — update profile (slug immutable)
+- `POST /api/business/profile/logo` — upload onboarding logo (multipart)
+- `PATCH /api/business/profile/archive` — archive a business profile (owner action)
+- `PATCH /api/business/profile/restore` — restore archived business within retention window
 
-### Tables & QR
-- `POST   /api/business/tables` — bulk create (specify count → tables 1..N with auto QR)
-- `GET    /api/business/tables` — list all with QR codes and active order count
-- `PATCH  /api/business/tables/:id` — update label, toggle is_active
-- `DELETE /api/business/tables/:id` — remove table + QR
-- `GET    /api/business/tables/:id/qr` — download QR (PNG/SVG)
-- `GET    /api/business/tables/qr/all` — batch download (ZIP/PDF)
+### Business Menu + Images
+- `GET/POST/PATCH/DELETE /api/business/categories...` — category CRUD + reorder
+- `GET/POST/PATCH/DELETE /api/business/menu-items...` — menu item CRUD + reorder + availability
+- `POST /api/business/menu-items/:id/image/upload` — upload menu image
+- `POST /api/business/menu-items/:id/image/generate` — generate menu image via provider
+- `GET /api/business/menu-suggestions/categories`
+- `GET /api/business/menu-suggestions/items`
 
-### Orders
-- `POST   /api/orders` — submit order (items, table_id, customer info)
-- `GET    /api/business/orders` — list (filter by status, date, table_number)
-- `PATCH  /api/business/orders/:id/status` — advance order status
+### AI
+- `GET /api/ai/menu/item-suggestions`
+- `POST /api/ai/menu/item-description`
 
-### Payments
-- `POST   /api/payments/create-session` — Stripe Checkout Session
-- `POST   /api/payments/webhook` — Stripe webhook handler
+### QR / Public
+- `GET /api/public/qr/:qrToken` — resolve QR token to business/table context
+- `POST /api/business/tables/:tableId/qr/regenerate`
+- `GET /api/business/tables/:tableId/qr/rotations`
 
 ### Admin
 - `GET    /api/admin/businesses` — list (filter by status)
 - `PATCH  /api/admin/businesses/:id/approve`
 - `PATCH  /api/admin/businesses/:id/reject`
-- `GET    /api/admin/users` — list all users
-- `GET    /api/admin/stats` — platform-wide stats
+
+### Placeholders / Not fully implemented yet
+- `GET /api/business/menu` currently returns placeholder payload.
+- `GET /api/business/tables` currently returns placeholder payload.
+- `GET /api/business/orders` currently returns placeholder payload.
+- Orders/payments route namespaces are not mounted yet in `apps/api/src/index.ts`.
 
 ## Feature Dependency Pyramid
 
@@ -280,16 +299,23 @@ Build features in this order. Each layer depends on the layers above it.
 
 | Route | Role | Purpose |
 |-------|------|---------|
+| `/` | dynamic | Root redirect entrypoint (routes by auth role/state) |
+| `/home` | public | Public landing page |
 | `/login` | public | Login form |
-| `/register` | public | Register (customer or business) |
-| `/register/business` | public | Business registration details |
-| `/menu/[businessSlug]?table=N` | public | Public menu page (scanned via QR) |
-| `/order/[orderId]` | public | Order status tracking |
-| `/dashboard` | business | Dashboard overview |
-| `/dashboard/menu` | business | Menu management |
-| `/dashboard/tables` | business | Table & QR management |
-| `/dashboard/orders` | business | Order management board |
-| `/admin` | admin | Admin panel |
+| `/register` | public | Business registration redirect page |
+| `/dashboard` | business | Dashboard overview + approval gating |
+| `/dashboard/onboarding` | business | Business onboarding/edit flow |
+| `/dashboard/menu` | business | Menu/category management + image + AI assist |
+| `/admin` | admin | Moderation panel (approve/reject businesses) |
+| `/qr/[qrToken]` | public | QR entry route (resolve + redirect) |
+| `/qr/login` | public | QR-scoped customer login |
+| `/qr/register` | public | QR-scoped customer registration |
+| `/menu/[slug]` | public | Public menu placeholder route |
+
+Planned but not yet present in web app routes:
+- `/dashboard/tables`
+- `/dashboard/orders`
+- `/order/[orderId]`
 
 ## Key Design Decisions
 
@@ -297,8 +323,64 @@ Build features in this order. Each layer depends on the layers above it.
 - **Table mapping included** — businesses specify table count, each gets a numbered QR. No visual floor plan in MVP.
 - **Payments required** — all orders go through Stripe. No cash/pay-at-counter in MVP.
 - **Admin-approved onboarding** — businesses register → pending → admin approves before they can create menus.
-- **English only, single currency** for MVP.
+- **English only** for MVP; currency is selected per business profile (`currency_code`).
 - **Mobile-first** public menu — most customers scan QR from phones.
+
+## Implemented Scope Snapshot (Current)
+
+This section is the high-level source of truth for what is already implemented across features.
+
+- **Layer 1 Foundation**
+  - Monorepo setup with `apps/api`, `apps/web`, and `packages/shared`.
+  - Prisma/PostgreSQL baseline schema and migrations.
+  - Docker Compose local runtime with healthchecks for db/api/web/minio.
+
+- **Layer 2 Authentication**
+  - Access + refresh cookie auth with refresh rotation.
+  - Role-aware routing (`business`, `admin`, QR-scoped `customer`).
+  - Main-site registration/login constrained to business/admin paths; customer auth is QR-scoped only (ADR-006).
+  - Auth status/refresh fallback flow used by root route redirect logic.
+
+- **Layer 3 Business Onboarding + Approval**
+  - Business profile create/update + admin approve/reject flow.
+  - Onboarding lock states in dashboard for pending/rejected businesses.
+  - Auto-generated immutable business slug (server-side uniqueness handling).
+  - Currency code persistence on business profile.
+  - Onboarding logo upload via multipart (S3-compatible storage path behind API).
+  - Business archive lifecycle is active:
+    - owner can archive with confirm flow,
+    - archived businesses are restorable within retention window,
+    - retained archives are auto-deleted after 30 days via worker + audit record.
+  - Onboarding currency selector uses app-styled searchable combobox with:
+    - single-row search/display input,
+    - selection-only commit behavior,
+    - close-on-select and anti-refocus guard (`label htmlFor`, not wrapper label).
+
+- **Layer 4 Menu Management**
+  - Category CRUD/reorder and menu item CRUD/edit/delete/availability controls.
+  - Dashboard menu page with pagination and business-status-aware behavior.
+  - Menu item dietary tags and UI badges.
+  - Item description support: manual input + AI generation endpoint (ADR-013).
+
+- **AI Assistance (ADR-010 / ADR-011 / ADR-013)**
+  - Category/item suggestion endpoints with deterministic fallback behavior.
+  - Dedicated AI API namespace (`/api/ai/*`).
+  - Singleton LLM client/model-handle initialization pattern in API.
+  - Timeout-aware fallback behavior and suggestion-quality guardrails.
+
+- **Image Storage + Lifecycle (ADR-014 / ADR-015)**
+  - Menu item image persistence stores object path (`image_path`) in DB, not raw image URL.
+  - S3-compatible object storage service with MinIO local defaults.
+  - Image upload and AI-image generation endpoints for menu items.
+  - Deleted asset cleanup queue + periodic retryable cleanup worker for deferred S3 deletion.
+
+- **Infra + Observability Highlights**
+  - Structured API request logging via singleton logger.
+  - `/healthz` endpoints for API and web; compose probes target `/healthz`.
+  - Docker runtime note: web server-side fetches should use `API_INTERNAL_URL` in containers.
+
+- **UI/UX Policy**
+  - User-facing notifications/errors must use toasts (not inline banner/status text).
 
 ## Updates 2026-03-19
 - Added `skills/claude-context-programmer` and enabled UI metadata; auth phase ADR approved (refresh tokens + httpOnly cookies + status field responses).
@@ -364,3 +446,5 @@ Build features in this order. Each layer depends on the layers above it.
 - Onboarding currency UX requirement: keep currency search and display in one input row; typed query is temporary and must only commit to saved value on explicit option selection.
 - Onboarding currency interaction requirement: on option selection, close the dropdown immediately and render committed value in the input.
 - Currency combobox implementation guard: do not wrap dropdown trigger/input + options list inside a parent `<label>`; use `label htmlFor` to avoid implicit refocus reopening behavior.
+- Root spec-sync pass completed: `Database Schema`, `API Endpoints`, `Key Frontend Routes`, and monorepo command guidance were reconciled against live code and `STATUS.md` so base CLAUDE reflects real current behavior.
+- ADR-017 accepted and implemented: dashboard business cards render logos, businesses can be archived/restored via API/UI, archived entries are hidden by default in dashboard, and a scheduled worker permanently deletes >30-day archived businesses with audit logging.

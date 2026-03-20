@@ -5,7 +5,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import aiRouter from "../src/routes/ai";
 
 type UserRecord = { id: string; email: string; role: "business" | "admin" | "customer" };
-type BusinessRecord = { id: string; userId: string; status: "pending" | "approved" | "rejected" };
+type BusinessRecord = {
+  id: string;
+  userId: string;
+  status: "pending" | "approved" | "rejected" | "archived";
+};
 
 const users: UserRecord[] = [];
 const businesses: BusinessRecord[] = [];

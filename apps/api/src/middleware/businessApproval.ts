@@ -8,7 +8,7 @@ declare global {
       business?: {
         id: string;
         userId: string;
-        status: "pending" | "approved" | "rejected";
+        status: "pending" | "approved" | "rejected" | "archived";
       };
     }
   }
@@ -49,10 +49,14 @@ export const resolveBusinessForUser = async (req: Request) => {
   });
 
   const approved = businesses.find(
-    (business: { status: "pending" | "approved" | "rejected" }) =>
+    (business: { status: "pending" | "approved" | "rejected" | "archived" }) =>
       business.status === "approved"
   );
-  return approved ?? businesses[0] ?? null;
+  const firstActive = businesses.find(
+    (business: { status: "pending" | "approved" | "rejected" | "archived" }) =>
+      business.status !== "archived"
+  );
+  return approved ?? firstActive ?? businesses[0] ?? null;
 };
 
 export const requireApprovedBusiness = async (
@@ -89,6 +93,15 @@ export const requireApprovedBusiness = async (
       : "Your business profile was rejected. Update and resubmit to continue.";
 
     return sendError(res, message, 403, "BUSINESS_REJECTED");
+  }
+
+  if (business.status === "archived") {
+    return sendError(
+      res,
+      "This business is archived. Restore it to continue.",
+      403,
+      "BUSINESS_ARCHIVED"
+    );
   }
 
   req.business = {

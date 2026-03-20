@@ -15,7 +15,9 @@ export default function AdminPage() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
   const [businesses, setBusinesses] = useState<AdminBusiness[]>([]);
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">(
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "pending" | "approved" | "rejected" | "archived"
+  >(
     "pending"
   );
   const [submittingId, setSubmittingId] = useState<string | null>(null);
@@ -120,7 +122,7 @@ export default function AdminPage() {
 
         <section className="rounded-xl border bg-white p-4">
           <div className="flex flex-wrap gap-2">
-            {(["pending", "approved", "rejected", "all"] as const).map((value) => (
+            {(["pending", "approved", "rejected", "archived", "all"] as const).map((value) => (
               <button
                 key={value}
                 onClick={() => setStatusFilter(value)}

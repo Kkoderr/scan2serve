@@ -3,7 +3,8 @@
 import React from "react";
 import { useAuth } from "../../lib/auth-context";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { showToast } from "../../lib/toast";
 
 export default function DashboardPage() {
   const {
@@ -14,14 +15,41 @@ export default function DashboardPage() {
     selectedBusiness,
     selectBusiness,
     businessLoading,
+    archiveBusinessProfile,
+    restoreBusinessProfile,
   } = useAuth();
   const router = useRouter();
+  const [showArchived, setShowArchived] = useState(false);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [archiveConfirmText, setArchiveConfirmText] = useState("");
+  const [archiveSubmitting, setArchiveSubmitting] = useState(false);
+  const [restoreSubmitting, setRestoreSubmitting] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
       router.push("/home");
     }
   }, [loading, user, router]);
+
+  const visibleBusinesses = useMemo(
+    () => {
+      if (showArchived) {
+        return businesses.filter((business) => business.status === "archived");
+      }
+      return businesses.filter((business) => business.status !== "archived");
+    },
+    [businesses, showArchived]
+  );
+
+  useEffect(() => {
+    if (visibleBusinesses.length === 0) {
+      return;
+    }
+    if (selectedBusiness && visibleBusinesses.some((business) => business.id === selectedBusiness.id)) {
+      return;
+    }
+    selectBusiness(visibleBusinesses[0].id);
+  }, [visibleBusinesses, selectedBusiness, selectBusiness]);
 
   if (loading) {
     return (
@@ -83,13 +111,54 @@ export default function DashboardPage() {
 
   const isBlocked =
     selectedBusiness &&
-    (selectedBusiness.status === "pending" || selectedBusiness.status === "rejected");
+    (selectedBusiness.status === "pending" ||
+      selectedBusiness.status === "rejected" ||
+      selectedBusiness.status === "archived");
   const statusLabel =
     selectedBusiness?.status === "pending"
       ? "Pending admin approval"
       : selectedBusiness?.status === "rejected"
         ? "Profile rejected - update and resubmit"
-        : "Approved";
+        : selectedBusiness?.status === "archived"
+          ? "Archived - restore within 30 days"
+          : "Approved";
+
+  const runArchive = async () => {
+    if (!selectedBusiness) return;
+    setArchiveSubmitting(true);
+    try {
+      await archiveBusinessProfile(selectedBusiness.id);
+      showToast({
+        variant: "success",
+        message: "Business archived. It will be permanently deleted after 30 days.",
+      });
+      setArchiveDialogOpen(false);
+      setArchiveConfirmText("");
+    } catch (error) {
+      showToast({
+        variant: "error",
+        message: error instanceof Error ? error.message : "Failed to archive business",
+      });
+    } finally {
+      setArchiveSubmitting(false);
+    }
+  };
+
+  const runRestore = async () => {
+    if (!selectedBusiness) return;
+    setRestoreSubmitting(true);
+    try {
+      await restoreBusinessProfile(selectedBusiness.id);
+      showToast({ variant: "success", message: "Business restored." });
+    } catch (error) {
+      showToast({
+        variant: "error",
+        message: error instanceof Error ? error.message : "Failed to restore business",
+      });
+    } finally {
+      setRestoreSubmitting(false);
+    }
+  };
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -116,39 +185,107 @@ export default function DashboardPage() {
         </header>
 
         <section className="rounded-xl border bg-white p-4">
-          <p className="text-sm font-medium">Your businesses</p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-medium">Your businesses</p>
+            <button
+              onClick={() => setShowArchived((current) => !current)}
+              className="rounded-md border border-gray-300 px-3 py-1 text-xs font-medium"
+            >
+              {showArchived ? "Show active" : "Show archived"}
+            </button>
+          </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {businesses.map((business) => (
+            {visibleBusinesses.map((business) => (
               <button
                 key={business.id}
                 onClick={() => selectBusiness(business.id)}
                 className={`rounded-lg border p-4 text-left transition ${
                   selectedBusiness?.id === business.id
-                    ? "border-black bg-gray-100"
-                    : "border-gray-200 bg-white hover:bg-gray-50"
+                    ? business.status === "archived"
+                      ? "border-red-300 bg-red-100"
+                      : "border-black bg-gray-100"
+                    : business.status === "archived"
+                      ? "border-red-200 bg-red-50 hover:bg-red-100/70"
+                      : "border-gray-200 bg-white hover:bg-gray-50"
                 }`}
               >
-                <p className="font-semibold">{business.name}</p>
-                <p className="text-sm text-gray-600">{business.slug}</p>
-                <span className="mt-3 inline-flex rounded-full bg-gray-200 px-2 py-0.5 text-xs capitalize">
+                <div className="flex items-center gap-3">
+                  {business.logoUrl ? (
+                    <img
+                      src={business.logoUrl}
+                      alt={`${business.name} logo`}
+                      className="h-12 w-12 rounded-md border object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-12 w-12 items-center justify-center rounded-md border bg-gray-100 text-xs font-semibold text-gray-600">
+                      {business.name.slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold">{business.name}</p>
+                    <p className="truncate text-sm text-gray-600">{business.slug}</p>
+                  </div>
+                </div>
+                <span
+                  className={`mt-3 inline-flex rounded-full px-2 py-0.5 text-xs capitalize ${
+                    business.status === "archived"
+                      ? "bg-red-100 text-red-700"
+                      : "bg-gray-200 text-gray-700"
+                  }`}
+                >
                   {business.status}
                 </span>
               </button>
             ))}
+            {visibleBusinesses.length === 0 && (
+              <div className="rounded-lg border border-dashed p-4 text-sm text-gray-500">
+                No businesses to show for this view.
+              </div>
+            )}
           </div>
         </section>
 
-        <section className="relative rounded-xl border bg-white p-6">
+        <section
+          className={`relative rounded-xl border p-6 ${
+            selectedBusiness?.status === "archived"
+              ? "border-red-200 bg-red-50"
+              : "bg-white"
+          }`}
+        >
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-xl font-semibold">Active business overview</h2>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => router.push("/dashboard/menu")}
-                className="rounded-md border border-gray-300 px-3 py-1 text-xs font-medium"
+              {selectedBusiness?.status !== "archived" ? (
+                <>
+                  <button
+                    onClick={() => router.push("/dashboard/menu")}
+                    className="rounded-md border border-gray-300 px-3 py-1 text-xs font-medium"
+                  >
+                    Manage menu
+                  </button>
+                  <button
+                    onClick={() => setArchiveDialogOpen(true)}
+                    className="rounded-md border border-red-200 px-3 py-1 text-xs font-medium text-red-700"
+                  >
+                    Archive business
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={runRestore}
+                  disabled={restoreSubmitting}
+                  className="rounded-md border border-gray-300 px-3 py-1 text-xs font-medium disabled:opacity-50"
+                >
+                  {restoreSubmitting ? "Restoring..." : "Restore business"}
+                </button>
+              )}
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-medium ${
+                  selectedBusiness?.status === "archived"
+                    ? "bg-red-100 text-red-700"
+                    : "bg-gray-200 text-gray-700"
+                }`}
               >
-                Manage menu
-              </button>
-              <span className="rounded-full bg-gray-200 px-3 py-1 text-xs font-medium">
                 {statusLabel}
               </span>
             </div>
@@ -156,15 +293,33 @@ export default function DashboardPage() {
 
           <div className={isBlocked ? "pointer-events-none blur-[2px]" : ""}>
             <div className="grid gap-4 md:grid-cols-3">
-              <div className="rounded-lg border p-4">
+              <div
+                className={`rounded-lg border p-4 ${
+                  selectedBusiness?.status === "archived"
+                    ? "border-red-200 bg-red-100/60"
+                    : ""
+                }`}
+              >
                 <p className="text-sm text-gray-500">Today orders</p>
                 <p className="mt-2 text-2xl font-semibold">0</p>
               </div>
-              <div className="rounded-lg border p-4">
+              <div
+                className={`rounded-lg border p-4 ${
+                  selectedBusiness?.status === "archived"
+                    ? "border-red-200 bg-red-100/60"
+                    : ""
+                }`}
+              >
                 <p className="text-sm text-gray-500">Pending orders</p>
                 <p className="mt-2 text-2xl font-semibold">0</p>
               </div>
-              <div className="rounded-lg border p-4">
+              <div
+                className={`rounded-lg border p-4 ${
+                  selectedBusiness?.status === "archived"
+                    ? "border-red-200 bg-red-100/60"
+                    : ""
+                }`}
+              >
                 <p className="text-sm text-gray-500">Revenue</p>
                 <p className="mt-2 text-2xl font-semibold">$0.00</p>
               </div>
@@ -178,6 +333,11 @@ export default function DashboardPage() {
                 <p className="mt-2 text-sm text-gray-600">
                   Dashboard operations are disabled until this business is approved.
                 </p>
+                {selectedBusiness?.status === "archived" && (
+                  <p className="mt-2 text-xs text-gray-600">
+                    Restore within 30 days to keep this business. After that it is permanently removed.
+                  </p>
+                )}
                 {selectedBusiness?.status === "rejected" &&
                   !!selectedBusiness.rejections?.length && (
                     <div className="mt-3 rounded-md bg-red-50 p-3 text-left text-xs text-red-800">
@@ -197,11 +357,58 @@ export default function DashboardPage() {
                     Edit and resubmit
                   </button>
                 )}
+                {selectedBusiness?.status === "archived" && (
+                  <button
+                    onClick={runRestore}
+                    disabled={restoreSubmitting}
+                    className="mt-4 rounded-md bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
+                  >
+                    {restoreSubmitting ? "Restoring..." : "Restore business"}
+                  </button>
+                )}
               </div>
             </div>
           )}
         </section>
       </section>
+      {archiveDialogOpen && selectedBusiness && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-lg">
+            <h3 className="text-lg font-semibold">Archive this business?</h3>
+            <p className="mt-2 text-sm text-gray-600">
+              This will disable operations immediately. The business will be permanently deleted
+              after 30 days unless restored.
+            </p>
+            <p className="mt-3 text-xs text-gray-600">
+              Type <span className="font-semibold">ARCHIVE</span> to confirm.
+            </p>
+            <input
+              value={archiveConfirmText}
+              onChange={(event) => setArchiveConfirmText(event.target.value.toUpperCase())}
+              className="mt-2 w-full rounded-md border px-3 py-2"
+              placeholder="ARCHIVE"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setArchiveDialogOpen(false);
+                  setArchiveConfirmText("");
+                }}
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={runArchive}
+                disabled={archiveConfirmText !== "ARCHIVE" || archiveSubmitting}
+                className="rounded-md bg-red-600 px-3 py-2 text-sm text-white disabled:opacity-50"
+              >
+                {archiveSubmitting ? "Archiving..." : "Confirm archive"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

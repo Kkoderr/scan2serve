@@ -167,10 +167,42 @@ While coding:
 - Reuse existing patterns (DO NOT reinvent)
 - Prefer existing scripts (pnpm workspace)
 
+
 ### Code Quality Rules:
 - Keep changes minimal and scoped
 - Avoid breaking existing flows
 - Maintain consistency with repo style
+
+### Ambiguity Handling (MANDATORY - Human Loop During Coding)
+
+While writing code, if ANY ambiguity, uncertainty, or missing requirement is detected:
+
+- IMMEDIATELY PAUSE coding
+- ASK the user a clear, specific question
+- DO NOT continue implementation based on assumptions
+
+### When to trigger:
+- Missing API contract details
+- Unclear data models or schema
+- Multiple valid architectural approaches
+- Undefined edge case behavior
+- Incomplete requirements from prompt or ADR
+
+### Behavior:
+- Ask questions inline during execution (not just in ADR phase)
+- Keep questions concise and decision-oriented
+- Resume coding ONLY after user clarification
+
+### Example:
+Instead of:
+→ Assuming a field type or API response
+
+Do:
+→ "Should the `menuId` be UUID or incremental integer?"
+
+### Strict Rule:
+- NEVER silently assume critical implementation details
+- ALWAYS involve human before proceeding when uncertain
 
 ### While working, TRACK:
 - decisions made
@@ -227,7 +259,62 @@ Append:
 - Next step
 ```
 
+
 DO NOT delete existing content.
+
+### Root CLAUDE.md Synchronization (CRITICAL)
+
+In addition to local CLAUDE.md updates, it is MANDATORY to update the **root `CLAUDE.md` file** after EVERY meaningful execution.
+
+Purpose:
+- Maintain a single source of truth for system-wide context
+- Prevent loss of architectural and implementation knowledge
+- Ensure future sessions and agents have full visibility
+
+### Rules:
+- ALWAYS append a new entry under the latest `## Updates YYYY-MM-DD` section
+- Summarize:
+  - What was implemented or changed
+  - Key decisions made
+  - Any new constraints or patterns introduced
+- DO NOT overwrite existing history entries
+- Keep entries concise but informative
+
+- ALSO update non-history sections of root CLAUDE.md if they become outdated:
+  - Project Overview
+  - Architecture
+  - Tech Stack
+  - Feature descriptions
+  - Any system design explanation
+
+- If implementation changes original assumptions → REFLECT those changes in-place
+- DO NOT leave stale or misleading documentation in descriptive sections
+
+### Important Distinction:
+- Historical sections (e.g., `## Updates YYYY-MM-DD`) → append ONLY (no edits)
+- Descriptive sections (overview, architecture, flows, etc.) → MUST be kept up-to-date and edited as needed
+
+### Behavior:
+- Treat root CLAUDE.md as a **living system spec**, not just a log
+- If code diverges from documented architecture → update the documentation immediately
+- Prefer correctness over preserving outdated descriptions
+
+### When to update:
+- After ANY code implementation (even small changes)
+- After ADR creation or updates
+- After bug fixes or refactors
+- After infra/config changes
+
+### Format:
+
+- <Short description of change>
+- Decision: <key decision if any>
+- Impact: <affected areas>
+- Next: <if applicable>
+
+### Strict Rule:
+- NEVER complete a task without updating root CLAUDE.md
+- Treat this as part of the execution loop, not optional documentation
 
 ---
 

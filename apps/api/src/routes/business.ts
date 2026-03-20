@@ -12,8 +12,15 @@ import { requireApprovedBusiness, resolveBusinessForUser } from "../middleware/b
 import { suggestCategories } from "../services/menuSuggestions";
 import { getMenuItemSuggestions } from "../services/llmMenuSuggestions";
 import { generateMenuItemImage } from "../services/aiImageProvider";
-import { resolveImageUrl, uploadImageObject } from "../services/objectStorage";
-import { enqueueDeletedMenuItemImage } from "../services/deletedAssetCleanup";
+import {
+  extractImagePathFromUrl,
+  resolveImageUrl,
+  uploadImageObject,
+} from "../services/objectStorage";
+import {
+  enqueueDeletedBusinessLogo,
+  enqueueDeletedMenuItemImage,
+} from "../services/deletedAssetCleanup";
 
 const router: express.Router = express.Router();
 const upload = multer({
@@ -79,6 +86,12 @@ const profileUpdateSchema = z.object({
   address: z.string().min(5).optional(),
   phone: z.string().min(6).max(32).optional(),
 });
+const profileArchiveSchema = z.object({
+  businessId: z.string().min(1),
+});
+const profileRestoreSchema = z.object({
+  businessId: z.string().min(1),
+});
 
 const qrRotateSchema = z.object({
   reason: z.string().max(250).optional(),
@@ -142,6 +155,10 @@ const menuItemSuggestionQuerySchema = z.object({
 const generateItemImageSchema = z.object({
   prompt: z.string().min(4).max(500).optional(),
 });
+const businessArchiveRetentionDays = Math.max(
+  1,
+  Number(process.env.BUSINESS_ARCHIVE_RETENTION_DAYS || 30)
+);
 
 type RawBusiness = {
   id: string;
@@ -153,7 +170,8 @@ type RawBusiness = {
   logoUrl: string | null;
   address: string;
   phone: string;
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "approved" | "rejected" | "archived";
+  archivedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   rejections?: { id: string; reason: string | null; createdAt: Date }[];
@@ -169,7 +187,8 @@ type SerializedBusiness = {
   logoUrl: string | null;
   address: string;
   phone: string;
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "approved" | "rejected" | "archived";
+  archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
   rejections?: { id: string; reason: string | null; createdAt: string }[];
@@ -187,6 +206,7 @@ const serializeBusiness = (business: RawBusiness): SerializedBusiness => {
     address: business.address,
     phone: business.phone,
     status: business.status,
+    archivedAt: business.archivedAt ? business.archivedAt.toISOString() : null,
     createdAt: business.createdAt.toISOString(),
     updatedAt: business.updatedAt.toISOString(),
   };
@@ -318,6 +338,29 @@ const enqueuePreviousImagePathBestEffort = async ({
   }
 };
 
+const enqueuePreviousLogoUrlBestEffort = async ({
+  entityId,
+  previousLogoUrl,
+}: {
+  entityId: string;
+  previousLogoUrl: string | null;
+}) => {
+  const logoPath = extractImagePathFromUrl(previousLogoUrl);
+  if (!logoPath) return;
+  try {
+    await enqueueDeletedBusinessLogo({
+      entityId,
+      s3Path: logoPath,
+    });
+  } catch (error) {
+    logger.warn("cleanup.deleted_assets.enqueue_failed", {
+      entityId,
+      s3Path: logoPath,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
 const isUniqueConstraintError = (error: unknown): boolean =>
   typeof error === "object" &&
   error !== null &&
@@ -442,6 +485,15 @@ router.patch(
       sendError(res, "Business profile not found", 404, "BUSINESS_PROFILE_REQUIRED");
       return;
     }
+    if (business.status === "archived") {
+      sendError(
+        res,
+        "Archived business cannot be edited. Restore it first.",
+        409,
+        "BUSINESS_ARCHIVED"
+      );
+      return;
+    }
 
     const data = {
       ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
@@ -480,6 +532,120 @@ router.patch(
       }
       throw error;
     }
+  })
+);
+
+router.patch(
+  "/profile/archive",
+  asyncHandler(async (req, res) => {
+    const parsed = profileArchiveSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(res, parsed.error.message, 400, "VALIDATION_ERROR");
+      return;
+    }
+
+    const business = await prisma.business.findFirst({
+      where: { id: parsed.data.businessId, userId: req.user!.id },
+      include: {
+        rejections: {
+          orderBy: { createdAt: "desc" },
+          take: 3,
+        },
+      },
+    });
+    if (!business) {
+      sendError(res, "Business profile not found", 404, "BUSINESS_PROFILE_REQUIRED");
+      return;
+    }
+
+    if (business.status === "archived") {
+      sendSuccess(res, { business: serializeBusiness(business as RawBusiness) });
+      return;
+    }
+
+    const updated = await prisma.business.update({
+      where: { id: business.id },
+      data: {
+        archivedPreviousStatus: business.status,
+        status: "archived",
+        archivedAt: new Date(),
+      },
+      include: {
+        rejections: {
+          orderBy: { createdAt: "desc" },
+          take: 3,
+        },
+      },
+    });
+
+    sendSuccess(res, { business: serializeBusiness(updated as RawBusiness) });
+  })
+);
+
+router.patch(
+  "/profile/restore",
+  asyncHandler(async (req, res) => {
+    const parsed = profileRestoreSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendError(res, parsed.error.message, 400, "VALIDATION_ERROR");
+      return;
+    }
+
+    const business = await prisma.business.findFirst({
+      where: { id: parsed.data.businessId, userId: req.user!.id },
+      include: {
+        rejections: {
+          orderBy: { createdAt: "desc" },
+          take: 3,
+        },
+      },
+    });
+    if (!business) {
+      sendError(res, "Business profile not found", 404, "BUSINESS_PROFILE_REQUIRED");
+      return;
+    }
+
+    if (business.status !== "archived") {
+      sendError(res, "Only archived businesses can be restored", 409, "BUSINESS_NOT_ARCHIVED");
+      return;
+    }
+
+    const archivedAt = business.archivedAt;
+    if (!archivedAt) {
+      sendError(res, "Archived timestamp missing", 409, "BUSINESS_ARCHIVE_INVALID");
+      return;
+    }
+    const maxRestoreAgeMs = businessArchiveRetentionDays * 24 * 60 * 60 * 1000;
+    if (Date.now() - archivedAt.getTime() > maxRestoreAgeMs) {
+      sendError(
+        res,
+        "Restore window expired for this archived business",
+        409,
+        "BUSINESS_ARCHIVE_EXPIRED"
+      );
+      return;
+    }
+
+    const restoredStatus =
+      business.archivedPreviousStatus && business.archivedPreviousStatus !== "archived"
+        ? business.archivedPreviousStatus
+        : "pending";
+    const updated = await prisma.business.update({
+      where: { id: business.id },
+      data: {
+        status: restoredStatus,
+        archivedAt: null,
+        archivedPreviousStatus: null,
+      },
+      include: {
+        rejections: {
+          orderBy: { createdAt: "desc" },
+          take: 3,
+        },
+      },
+    });
+
+    sendSuccess(res, { business: serializeBusiness(updated as RawBusiness) });
   })
 );
 
@@ -533,6 +699,10 @@ router.post(
             take: 3,
           },
         },
+      });
+      await enqueuePreviousLogoUrlBestEffort({
+        entityId: business.id,
+        previousLogoUrl: business.logoUrl,
       });
 
       sendSuccess(res, { business: serializeBusiness(updated as RawBusiness) });

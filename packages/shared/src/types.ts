@@ -2,7 +2,7 @@
 
 export type UserRole = "customer" | "business" | "admin";
 
-export type BusinessStatus = "pending" | "approved" | "rejected";
+export type BusinessStatus = "pending" | "approved" | "rejected" | "archived";
 
 export type OrderStatus =
   | "pending"
@@ -74,6 +74,7 @@ export interface BusinessProfile {
   address: string;
   phone: string;
   status: BusinessStatus;
+  archivedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   rejections?: BusinessRejection[];

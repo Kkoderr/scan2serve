@@ -12,6 +12,13 @@ vi.mock("../src/services/objectStorage", () => ({
   uploadImageObject: uploadImageObjectMock,
   resolveImageUrl: (imagePath: string | null) =>
     imagePath ? `http://localhost:9000/scan2serve-menu-images/${imagePath}` : null,
+  extractImagePathFromUrl: (imageUrl: string | null) => {
+    if (!imageUrl) return null;
+    const marker = "/scan2serve-menu-images/";
+    const idx = imageUrl.indexOf(marker);
+    if (idx < 0) return null;
+    return imageUrl.slice(idx + marker.length);
+  },
 }));
 
 vi.mock("../src/services/aiImageProvider", () => ({
@@ -20,7 +27,7 @@ vi.mock("../src/services/aiImageProvider", () => ({
 
 import businessRouter from "../src/routes/business";
 
-type BusinessStatus = "pending" | "approved" | "rejected";
+type BusinessStatus = "pending" | "approved" | "rejected" | "archived";
 type UserRecord = { id: string; email: string; role: "business" | "admin" | "customer" };
 type BusinessRecord = { id: string; userId: string; status: BusinessStatus };
 type CategoryRecord = {

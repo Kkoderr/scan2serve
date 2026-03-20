@@ -7,7 +7,7 @@ import { requireAuth, requireRole } from "../middleware/auth";
 
 const router: express.Router = express.Router();
 
-const statusSchema = z.enum(["pending", "approved", "rejected"]);
+const statusSchema = z.enum(["pending", "approved", "rejected", "archived"]);
 const rejectSchema = z.object({
   reason: z.string().max(2000).optional().nullable(),
 });
@@ -22,7 +22,8 @@ type RawBusiness = {
   logoUrl: string | null;
   address: string;
   phone: string;
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "approved" | "rejected" | "archived";
+  archivedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   rejections?: { id: string; reason: string | null; createdAt: Date }[];
@@ -39,6 +40,7 @@ const serializeBusiness = (business: RawBusiness) => ({
   address: business.address,
   phone: business.phone,
   status: business.status,
+  archivedAt: business.archivedAt ? business.archivedAt.toISOString() : null,
   createdAt: business.createdAt.toISOString(),
   updatedAt: business.updatedAt.toISOString(),
   rejections: business.rejections?.map((item) => ({
@@ -54,7 +56,7 @@ router.get(
   "/businesses",
   asyncHandler(async (req, res) => {
     const statusQuery = req.query.status;
-    let statusFilter: "pending" | "approved" | "rejected" | undefined;
+    let statusFilter: "pending" | "approved" | "rejected" | "archived" | undefined;
 
     if (typeof statusQuery === "string") {
       const parsed = statusSchema.safeParse(statusQuery);

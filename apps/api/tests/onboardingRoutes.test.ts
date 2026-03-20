@@ -11,12 +11,19 @@ vi.mock("../src/services/objectStorage", () => ({
   uploadImageObject: uploadImageObjectMock,
   resolveImageUrl: (imagePath: string | null) =>
     imagePath ? `http://localhost:9000/scan2serve-menu-images/${imagePath}` : null,
+  extractImagePathFromUrl: (imageUrl: string | null) => {
+    if (!imageUrl) return null;
+    const marker = "/scan2serve-menu-images/";
+    const idx = imageUrl.indexOf(marker);
+    if (idx < 0) return null;
+    return imageUrl.slice(idx + marker.length);
+  },
 }));
 import businessRouter from "../src/routes/business";
 import adminRouter from "../src/routes/admin";
 
 type Role = "business" | "admin" | "customer";
-type BusinessStatus = "pending" | "approved" | "rejected";
+type BusinessStatus = "pending" | "approved" | "rejected" | "archived";
 
 type UserRecord = { id: string; email: string; role: Role };
 type BusinessRecord = {
@@ -30,6 +37,8 @@ type BusinessRecord = {
   address: string;
   phone: string;
   status: BusinessStatus;
+  archivedAt?: Date | null;
+  archivedPreviousStatus?: BusinessStatus | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -89,6 +98,8 @@ vi.mock("../src/prisma", () => ({
           address: data.address,
           phone: data.phone,
           status: data.status,
+          archivedAt: data.archivedAt ?? null,
+          archivedPreviousStatus: data.archivedPreviousStatus ?? null,
           createdAt: new Date(),
           updatedAt: new Date(),
         };
@@ -557,6 +568,72 @@ describe("Layer 3 onboarding routes", () => {
     });
     expect(approved._getStatusCode()).toBe(200);
     expect(approved._getJSONData().status).toBe(1);
+  });
+
+  it("archives and restores business profiles within retention window", async () => {
+    const businessUser = users[0];
+    businesses.push({
+      id: "b_archive",
+      userId: businessUser.id,
+      name: "Archive Cafe",
+      slug: "archive-cafe",
+      currencyCode: "USD",
+      description: null,
+      logoUrl: null,
+      address: "A",
+      phone: "1234567",
+      status: "approved",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const archived = await run(businessRouter, "PATCH", "/profile/archive", {
+      user: businessUser,
+      body: { businessId: "b_archive" },
+    });
+    expect(archived._getStatusCode()).toBe(200);
+    expect(archived._getJSONData().data.business.status).toBe("archived");
+
+    const blocked = await run(businessRouter, "GET", "/ops/ping", {
+      user: businessUser,
+      headers: { "x-business-id": "b_archive" },
+    });
+    expect(blocked._getStatusCode()).toBe(403);
+    expect(blocked._getJSONData().error.code).toBe("BUSINESS_ARCHIVED");
+
+    const restored = await run(businessRouter, "PATCH", "/profile/restore", {
+      user: businessUser,
+      body: { businessId: "b_archive" },
+    });
+    expect(restored._getStatusCode()).toBe(200);
+    expect(restored._getJSONData().data.business.status).toBe("approved");
+  });
+
+  it("rejects restore after archive retention window expires", async () => {
+    const businessUser = users[0];
+    businesses.push({
+      id: "b_archive_old",
+      userId: businessUser.id,
+      name: "Old Archive",
+      slug: "old-archive",
+      currencyCode: "USD",
+      description: null,
+      logoUrl: null,
+      address: "A",
+      phone: "1234567",
+      status: "archived",
+      archivedAt: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000),
+      archivedPreviousStatus: "approved",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const restored = await run(businessRouter, "PATCH", "/profile/restore", {
+      user: businessUser,
+      body: { businessId: "b_archive_old" },
+    });
+    expect(restored._getStatusCode()).toBe(409);
+    expect(restored._getJSONData().error.code).toBe("BUSINESS_ARCHIVE_EXPIRED");
   });
 
   it("regenerates QR token for an approved business table", async () => {

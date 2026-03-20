@@ -111,6 +111,22 @@ export const uploadImageObject = async ({
 export const resolveImageUrl = (imagePath: string | null) =>
   imagePath ? toPublicImageUrl(imagePath) : null;
 
+export const extractImagePathFromUrl = (imageUrl: string | null) => {
+  if (!imageUrl) return null;
+  try {
+    const parsed = new URL(imageUrl);
+    const segments = parsed.pathname
+      .split("/")
+      .filter(Boolean)
+      .map((segment) => decodeURIComponent(segment));
+    if (segments.length < 2) return null;
+    if (segments[0] !== s3Bucket) return null;
+    return segments.slice(1).join("/");
+  } catch {
+    return null;
+  }
+};
+
 export const deleteImageObject = async (objectPath: string) => {
   await ensureBucketReady();
   await s3Client.send(

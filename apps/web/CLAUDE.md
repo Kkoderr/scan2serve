@@ -117,3 +117,14 @@ pnpm lint   # run Next.js ESLint
 - Currency selector follow-up: onboarding now uses a merged single-row input (display + search together); typed search is non-committal until user selects an option.
 - Currency selector behavior: selecting an option must immediately close dropdown and show committed value in the same input.
 - Currency combobox markup rule: avoid nesting combobox interactive controls inside a wrapping `<label>`; use `label htmlFor` + container to prevent browser refocus/reopen on option click.
+- ADR-017 dashboard update in `src/app/dashboard/page.tsx`:
+  - business cards now render business logos (with fallback placeholder),
+  - archived businesses are hidden by default with `Show archived` toggle,
+  - archive flow uses explicit confirm dialog (type `ARCHIVE`) and restore action.
+- Auth context now exposes business archive/restore actions (`src/lib/auth-context.tsx`) using API endpoints `PATCH /api/business/profile/archive` and `PATCH /api/business/profile/restore`.
+- Added dashboard regression coverage in `tests/dashboard.test.tsx` for archived-toggle behavior and logo rendering.
+- Hook-order runtime fix: moved `useMemo`/`useEffect` declarations in `src/app/dashboard/page.tsx` above all early-return branches to resolve React `Rules of Hooks` error triggered on loading-to-ready transitions.
+- Archived status visual refinement: dashboard now renders archived badges with red-tinted chips (`bg-red-100 text-red-700`) on business cards and selected-business status pill in `src/app/dashboard/page.tsx`.
+- Archived filter behavior refinement: `Show archived` now switches the business grid to archived-only view (not mixed list), with `Show active` to return to active businesses in `src/app/dashboard/page.tsx`.
+- Archived emphasis update: archived business cards and archived overview panel/metric cards use red-tinted backgrounds (`red-50` / `red-100`) to make non-active state visually obvious.
+- Updated `tests/dashboard.test.tsx` to assert archived-only toggle behavior and archived chip red styling.

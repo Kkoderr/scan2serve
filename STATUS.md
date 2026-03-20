@@ -11,12 +11,10 @@
 
 **Date:** 2026-03-20
 **What was done:**
-- Fixed persistent currency dropdown reopening issue by removing nested interactive controls from wrapping `<label>` in onboarding currency field.
-- Refactored currency field markup in `apps/web/src/app/dashboard/onboarding/page.tsx` to use `label htmlFor` + container div, preventing browser label-refocus reopening after option click.
-- Kept close-on-select behavior and selection-only commit behavior intact.
-- Revalidated web quality gates:
-  - `pnpm --filter @scan2serve/web test` (passes, 26 tests),
-  - `pnpm --filter @scan2serve/web build` (passes).
+- Updated dashboard archived filter behavior in `apps/web/src/app/dashboard/page.tsx`.
+- `Show archived` now displays only archived businesses; toggle switches to `Show active` for returning to active list.
+- Added stronger archived visual emphasis: archived business cards and archived overview area use red-tinted backgrounds.
+- Updated dashboard test assertions and revalidated web suite: `pnpm --filter @scan2serve/web test` passes (`27/27`).
 
 **What's NOT done yet:**
 - Local runtime validation with real Nano-Banana credentials is still pending (env placeholders are set, provider key/url not configured).
@@ -25,10 +23,11 @@
 - Layer 5+ features (tables/QR advanced flows, ordering/payments, dashboards) remain pending.
 - Production cookie/CORS hardening review still pending once deploy targets are fixed.
 
-**Next step:** Cleanup observability + onboarding media lifecycle validation
-1. Add read-only admin/debug endpoint for deleted-asset cleanup queue health and recent failures.
-2. Decide whether onboarding logos should persist `logo_path` (for deferred cleanup symmetry) in addition to derived URL.
-3. Run compose smoke test with real Nano-Banana credentials and onboarding/logo upload flows.
+**Next step:** Archive lifecycle observability + migration/runbook hardening
+1. Add admin/debug endpoint for archive cleanup worker health and recent archived-delete audit entries.
+2. Consider persisting explicit `logo_path` for businesses to avoid URL parsing when enqueuing logo cleanup.
+3. Add startup/runbook guard to ensure schema sync (`db:push`/migrate) is always re-run after enum/status model changes.
+4. Add targeted dashboard regression test for loading-to-ready rerender path to catch future hook-order regressions earlier.
 
 **Build progress:**
 ```
@@ -401,6 +400,45 @@ Layer 11: Polish & Deploy
 - Updated onboarding currency section to explicit `label htmlFor="currency-code"` plus non-label wrapper so option click no longer triggers implicit refocus/reopen.
 - Revalidated `@scan2serve/web` tests and production build.
 
+### 2026-03-20 — Session 56: Root CLAUDE scope snapshot expanded across all implemented features
+- Added a new `Implemented Scope Snapshot (Current)` section in root `CLAUDE.md`.
+- Consolidated implemented feature status across foundation, auth, onboarding/approval, menu management, AI assistance, image lifecycle cleanup, infra observability, and UX policy.
+- Purpose: keep base CLAUDE as a fast, complete scope reference beyond only recent feature deltas.
+
+### 2026-03-20 — Session 57: Root CLAUDE spec audited and synchronized with current codebase
+- Scanned actual API route mounts, Prisma schema models, and existing web routes; cross-checked with `STATUS.md`.
+- Rewrote stale root `CLAUDE.md` sections (`Database Schema`, `API Endpoints`, `Key Frontend Routes`, monorepo commands) to match current implementation reality.
+- Kept long-term feature dependency pyramid intact while separating implemented vs placeholder/not-yet-mounted scope.
+
+### 2026-03-20 — Session 58: ADR-017 accepted + dashboard logo/archive lifecycle implementation
+- Implemented dashboard business-card logo rendering and archived-business UX (hidden-by-default with toggle, confirm-before-archive, restore action).
+- Extended business lifecycle with archived state + restore window and API endpoints (`PATCH /profile/archive`, `PATCH /profile/restore`).
+- Added archived-business retention worker + deletion audit table and S3 cleanup enqueue integration for menu/logo assets.
+- Added migration `20260320130000_business_archive_lifecycle` and expanded API/web tests; all API/web test+build gates pass.
+
+### 2026-03-20 — Session 59: Runtime incident validation + schema drift fix
+- Investigated “implementation not working” report by running test suites and live runtime diagnostics.
+- Found container runtime mismatch: Postgres `BusinessStatus` enum in running DB did not include `archived`, causing archive-worker/runtime failures.
+- Fixed by applying schema sync inside running API container (`docker-compose exec -T api pnpm --filter @scan2serve/api db:push`).
+- Verified live archive flow end-to-end in container (`register -> login -> create profile -> archive -> restore` all successful).
+
+### 2026-03-20 — Session 60: Dashboard hook-order runtime fix
+- Investigated user-reported dashboard crash and confirmed React `Rules of Hooks` violation in `apps/web/src/app/dashboard/page.tsx`.
+- Root cause: `useMemo` and a follow-up `useEffect` were defined after early-return branches (`loading`, `user`, role, business list), changing hook order between renders.
+- Moved those hooks above all conditional returns so every render executes hooks in identical order.
+- Revalidated with `pnpm --filter @scan2serve/web test` (27 tests passing).
+
+### 2026-03-20 — Session 61: Archived badge red-tint UI refinement
+- Updated dashboard archived status chips to use red-tinted styling on business cards and selected-business overview status pill.
+- Change applied in `apps/web/src/app/dashboard/page.tsx` with archived-only conditional class variants.
+- Revalidated with `pnpm --filter @scan2serve/web test` (27 tests passing).
+
+### 2026-03-20 — Session 62: Archived-only filter toggle + stronger inactive card emphasis
+- Changed dashboard business-list filtering so `Show archived` renders archived businesses only (instead of showing all).
+- Added red-tinted backgrounds for archived business cards and the archived overview section/metric cards to emphasize non-active state.
+- Updated `tests/dashboard.test.tsx` for archived-only toggle expectation and archived red-chip class assertion.
+- Revalidated with `pnpm --filter @scan2serve/web test` (27 tests passing).
+
 ---
 
 ## Decisions Log
@@ -421,6 +459,7 @@ Layer 11: Polish & Deploy
 | ADR-014 | Menu item image persistence via local S3 + DB file path | Persist only S3 object path (`image_path`) for menu items, add MinIO local storage flow, and wire upload/AI image generation endpoints into dashboard actions | 2026-03-20 |
 | ADR-015 | S3 deletion queue + periodic cleanup worker | Track deleted/replaced image paths in DB and run scheduled retryable cleanup to remove orphaned S3 objects safely | 2026-03-20 |
 | ADR-016 | Onboarding auto-slug, currency input, and drag-drop logo upload | Remove manual slug edits, enforce server-side unique slug generation, collect currency, and replace logo URL field with uploaded image flow | 2026-03-20 |
+| ADR-017 | Dashboard logos + business archive lifecycle with 30-day retention delete | Improve dashboard identity using logos, replace destructive delete with reversible archive window, and enforce eventual hard delete with audit trail | 2026-03-20 |
 
 ---
 

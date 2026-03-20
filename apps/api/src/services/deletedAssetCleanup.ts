@@ -18,10 +18,40 @@ export const enqueueDeletedMenuItemImage = async ({
   entityId: string;
   s3Path: string;
 }) => {
+  await enqueueDeletedAsset({
+    assetType: "menu_item_image",
+    entityId,
+    s3Path,
+  });
+};
+
+export const enqueueDeletedBusinessLogo = async ({
+  entityId,
+  s3Path,
+}: {
+  entityId: string;
+  s3Path: string;
+}) => {
+  await enqueueDeletedAsset({
+    assetType: "business_logo",
+    entityId,
+    s3Path,
+  });
+};
+
+const enqueueDeletedAsset = async ({
+  assetType,
+  entityId,
+  s3Path,
+}: {
+  assetType: "menu_item_image" | "business_logo";
+  entityId: string;
+  s3Path: string;
+}) => {
   if (!s3Path.trim()) return;
   await prisma.deletedAssetCleanup.create({
     data: {
-      assetType: "menu_item_image",
+      assetType,
       entityId,
       s3Path,
       status: "pending",

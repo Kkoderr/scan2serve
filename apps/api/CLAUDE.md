@@ -118,3 +118,12 @@ pnpm db:studio    # open Prisma Studio GUI
 - Added business currency persistence (`currencyCode` / `currency_code`) and normalized 3-letter uppercase validation in onboarding create/update routes.
 - Added onboarding logo upload endpoint `POST /profile/logo` (multipart) in `src/routes/business.ts`, backed by S3 object storage and persisted to `business.logoUrl`.
 - Added onboarding route tests for slug auto-generation uniqueness, slug immutability rejection, and profile logo upload behavior.
+- ADR-017 implementation:
+  - business lifecycle now includes `archived` state with `archived_at` and `archived_previous_status`,
+  - added owner endpoints `PATCH /profile/archive` and `PATCH /profile/restore`,
+  - restore enforces retention window (`BUSINESS_ARCHIVE_RETENTION_DAYS`).
+- Added archived-business cleanup worker `src/services/archivedBusinessCleanup.ts`:
+  - permanently deletes archived businesses older than retention threshold,
+  - writes audit rows to `archived_business_deletion_audits`,
+  - enqueues menu/logo asset paths into `deleted_asset_cleanups` for deferred S3 deletion.
+- Added archive lifecycle env knobs in `.env.example` and test coverage in `tests/archivedBusinessCleanup.test.ts` plus onboarding-route archive/restore tests.
