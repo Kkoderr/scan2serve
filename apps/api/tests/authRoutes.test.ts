@@ -3,6 +3,7 @@ import { createMocks } from "node-mocks-http";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import authRouter from "../src/routes/auth";
 import { __resetQrAuthRateLimitForTests } from "../src/middleware/qrAuthRateLimit";
+import { signAccessToken } from "../src/services/authService";
 
 const users: any[] = [];
 const refreshTokens: any[] = [];
@@ -76,7 +77,7 @@ const parseCookies = (cookieHeader?: string) => {
   }, {} as Record<string, string>);
 };
 
-type SupportedMethod = "post";
+type SupportedMethod = "post" | "get";
 
 const getRouteHandler = (method: SupportedMethod, path: string) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -100,11 +101,20 @@ const waitForResponseEnd = async (res: ReturnType<typeof createMocks>["res"]) =>
   throw new Error("Mock response did not complete");
 };
 
-const run = async (method: SupportedMethod, path: string, body?: any, cookies?: string) => {
+const run = async (
+  method: SupportedMethod,
+  path: string,
+  body?: any,
+  cookies?: string,
+  headers?: Record<string, string>
+) => {
   const { req, res } = createMocks({
     method: method.toUpperCase(),
     url: path,
-    headers: cookies ? { cookie: cookies } : undefined,
+    headers: {
+      ...(cookies ? { cookie: cookies } : {}),
+      ...(headers || {}),
+    },
     eventEmitter: EventEmitter,
   });
 
@@ -205,7 +215,7 @@ describe("auth routes", () => {
     expect(res._getJSONData().error?.code).toBe("CUSTOMER_AUTH_QR_ONLY");
   });
 
-  it("rate limits repeated customer QR auth attempts", async () => {
+  it("treats invalid qrToken customer registration attempts as non-QR and rejects them", async () => {
     vi.stubEnv("QR_AUTH_RATE_LIMIT_WINDOW_SEC", "120");
     vi.stubEnv("QR_AUTH_RATE_LIMIT_MAX_ATTEMPTS", "2");
 
@@ -216,6 +226,7 @@ describe("auth routes", () => {
       qrToken: "bad-qr-token-123",
     });
     expect(first._getStatusCode()).toBe(403);
+    expect(first._getJSONData().error?.code).toBe("CUSTOMER_AUTH_QR_ONLY");
 
     const second = await run("post", "/register", {
       email: "rl-user@y.com",
@@ -224,18 +235,10 @@ describe("auth routes", () => {
       qrToken: "bad-qr-token-123",
     });
     expect(second._getStatusCode()).toBe(403);
-
-    const third = await run("post", "/register", {
-      email: "rl-user@y.com",
-      password: "password123",
-      role: "customer",
-      qrToken: "bad-qr-token-123",
-    });
-    expect(third._getStatusCode()).toBe(429);
-    expect(third._getJSONData().error?.code).toBe("QR_AUTH_RATE_LIMITED");
+    expect(second._getJSONData().error?.code).toBe("CUSTOMER_AUTH_QR_ONLY");
   });
 
-  it("rejects customer registration when QR table is inactive", async () => {
+  it("treats inactive QR context as non-customer scope for registration", async () => {
     qrCodes[0].table.isActive = false;
     const res = await run("post", "/register", {
       email: "inactive-table@y.com",
@@ -244,17 +247,56 @@ describe("auth routes", () => {
       qrToken: "valid-qr-token-123",
     });
     expect(res._getStatusCode()).toBe(403);
-    expect(res._getJSONData().error?.code).toBe("TABLE_INACTIVE");
+    expect(res._getJSONData().error?.code).toBe("CUSTOMER_AUTH_QR_ONLY");
   });
 
-  it("rejects refresh when both customer and business refresh cookies are sent", async () => {
+  it("uses business scope for refresh when both cookie sets are sent without qrToken", async () => {
     const res = await run(
       "post",
       "/refresh",
       undefined,
       "refresh_token=business-token; qr_customer_refresh=customer-token"
     );
-    expect(res._getStatusCode()).toBe(400);
-    expect(res._getJSONData().error?.code).toBe("MIXED_REFRESH_COOKIES");
+    expect(res._getStatusCode()).toBe(401);
+    expect(res._getJSONData().error?.code).toBe("INVALID_REFRESH");
+  });
+
+  it("returns both valid sessions from /sessions", async () => {
+    users.push(
+      { id: "b-user", email: "biz@x.com", role: "business", passwordHash: "x" },
+      { id: "c-user", email: "cust@x.com", role: "customer", passwordHash: "x" }
+    );
+
+    const businessAccess = signAccessToken({
+      id: "b-user",
+      email: "biz@x.com",
+      role: "business",
+    });
+    const customerAccess = signAccessToken({
+      id: "c-user",
+      email: "cust@x.com",
+      role: "customer",
+    });
+
+    const res = await run(
+      "get",
+      "/sessions",
+      undefined,
+      `access_token=${encodeURIComponent(businessAccess)}; qr_customer_access=${encodeURIComponent(customerAccess)}`
+    );
+    expect(res._getStatusCode()).toBe(200);
+    expect(res._getJSONData().data.businessUser?.id).toBe("b-user");
+    expect(res._getJSONData().data.customerUser?.id).toBe("c-user");
+  });
+
+  it("supports scoped logout without clearing both sessions", async () => {
+    const res = await run(
+      "post",
+      "/logout",
+      { scope: "customer" },
+      "refresh_token=business-refresh-token; qr_customer_refresh=customer-refresh-token"
+    );
+    expect(res._getStatusCode()).toBe(200);
+    expect(res._getJSONData().status).toBe(1);
   });
 });

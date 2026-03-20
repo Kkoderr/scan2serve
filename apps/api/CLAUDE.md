@@ -141,3 +141,23 @@ pnpm db:studio    # open Prisma Studio GUI
 - ADR-022 accepted and implemented: menu image generation runtime is now Gemini-only in `src/services/aiImageProvider.ts`; Nano-Banana/provider-switch branches were removed.
 - Runtime config cleanup: removed `AI_IMAGE_PROVIDER` and `NANOBANANA_*` expectations from API env surface; image generation now depends on `GEMINI_API_KEY`, `GEMINI_API_URL`, `GEMINI_IMAGE_MODEL`, `AI_IMAGE_TIMEOUT_MS`.
 - Docker runtime note: for local compose, API now reads `./apps/api/.env` via `env_file`; avoid setting `GEMINI_API_KEY: ""` in compose `environment` because it overrides env-file values and causes immediate `AI_IMAGE_GENERATION_FAILED` responses.
+- ADR-019 accepted and implemented for Layer 5 API contracts in `src/routes/business.ts`:
+  - `GET /tables` (pagination + inactive filter + QR metadata),
+  - `POST /tables/bulk` (sequential table creation with QR issuance),
+  - `PATCH /tables/:tableId` (label + active toggle),
+  - `GET /tables/:tableId/qr/download` (single PNG/SVG),
+  - `POST /tables/qr/download` (batch ZIP export).
+- Added ZIP utility `src/utils/simpleZip.ts` (store-mode zip builder) to support batch QR downloads without external runtime deps.
+- Added Layer 5 route tests in `tests/tableRoutes.test.ts` covering list/bulk/patch and single/batch QR download response contracts.
+- Prisma observability update: `src/prisma.ts` now routes DB query logging through singleton `logger` when `PRISMA_LOG_QUERIES=true` (event-based Prisma query logs).
+- Added `PRISMA_LOG_QUERIES=false` to `.env.example` as the runtime toggle for SQL query logging.
+- Auth scope resolution update in `src/routes/auth.ts`: `/api/auth/*` now stays unified and resolves customer-vs-business scope from `qrToken` validity (body/query/header), rather than requiring separate route namespaces.
+- Refresh/me/logout semantics now use scoped cookie selection in `src/routes/auth.ts`; mixed cookie presence no longer hard-fails by default when scope is deterministically resolved.
+- Updated `tests/authRoutes.test.ts` to align with qrToken-validity scope behavior (invalid/inactive QR context falls back to non-customer scope and rejects customer-intent requests with `CUSTOMER_AUTH_QR_ONLY`).
+- Customer-session cookie-path fix in `src/routes/auth.ts`: `qr_customer_access` is now set with `path=/` (was `/qr`) so `/api/auth/me` can read customer access tokens reliably without falling back to business identity.
+- This preserves separate cookie names for customer/business (`qr_customer_*` vs standard tokens) while preventing apparent token overwrite/mix issues during shared-browser sessions.
+- ADR-024 implementation in `src/routes/auth.ts`:
+  - added `GET /api/auth/sessions` to expose both currently valid access-token sessions (`businessUser`, `customerUser`) plus `activeScope`,
+  - extended `POST /api/auth/logout` to accept optional `{ scope: "business" | "customer" | "all" }` for explicit scoped logout in mixed-session scenarios.
+- Added auth route tests in `tests/authRoutes.test.ts` for dual-session introspection and scoped logout behavior.
+- Runtime verification note: `/api/auth/sessions` reports both `businessUser` and `customerUser` independently from access cookies; `activeScope` follows qrToken-context resolution, so without QR context it remains `business` even when only customer session is still active.

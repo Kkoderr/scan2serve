@@ -1,6 +1,6 @@
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import HomePage from "../src/app/home/page";
 
 const pushMock = vi.fn();
@@ -20,25 +20,24 @@ describe("HomePage", () => {
     useAuthMock.mockReset();
   });
 
-  it("opens login dialog from hero CTA for unauthenticated users", () => {
+  it("does not render standalone login/logout action buttons in home body", () => {
     useAuthMock.mockReturnValue({
       user: null,
       loading: false,
-      logout: vi.fn(),
     });
 
     render(<HomePage />);
 
     expect(screen.getByText("Scan2Serve")).toBeTruthy();
-    fireEvent.click(screen.getAllByText("Login")[0]);
-    expect(screen.getByText("Welcome back")).toBeTruthy();
+    expect(screen.queryByText("Welcome back")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Login" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Logout" })).toBeNull();
   });
 
   it("shows profile section with one role CTA when user is loaded", () => {
     useAuthMock.mockReturnValue({
       user: { id: "u1", email: "biz@example.com", role: "business" },
       loading: false,
-      logout: vi.fn(),
     });
 
     render(<HomePage />);

@@ -23,6 +23,8 @@ type UpdateBusinessProfileInput = Partial<CreateBusinessProfileInput> & {
 
 type AuthContextType = {
   user: UserProfile | null;
+  businessUser: UserProfile | null;
+  customerUser: UserProfile | null;
   businesses: BusinessProfile[];
   selectedBusiness: BusinessProfile | null;
   loading: boolean;
@@ -33,6 +35,9 @@ type AuthContextType = {
   loginCustomerFromQr: (input: LoginRequest & { qrToken: string }) => Promise<void>;
   registerCustomerFromQr: (input: RegisterRequest & { role: "customer"; qrToken: string }) => Promise<void>;
   logout: () => Promise<void>;
+  logoutBusiness: () => Promise<void>;
+  logoutCustomer: () => Promise<void>;
+  logoutAll: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   refreshBusinessProfiles: () => Promise<void>;
   selectBusiness: (businessId: string) => void;
@@ -44,8 +49,32 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const getQrTokenFromLocation = (): string | undefined => {
+  if (typeof window === "undefined") return undefined;
+  const url = new URL(window.location.href);
+  const queryToken = url.searchParams.get("token") ?? url.searchParams.get("qrToken");
+  if (queryToken && queryToken.trim().length >= 12) return queryToken.trim();
+
+  if (url.pathname.startsWith("/qr/")) {
+    const parts = url.pathname.split("/").filter(Boolean);
+    const segment = parts[1];
+    if (segment && segment !== "login" && segment !== "register" && segment.length >= 12) {
+      return decodeURIComponent(segment);
+    }
+  }
+
+  return undefined;
+};
+
+const getScopedAuthHeaders = () => {
+  const qrToken = getQrTokenFromLocation();
+  return qrToken ? { "x-qr-token": qrToken } : undefined;
+};
+
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [businessUser, setBusinessUser] = useState<UserProfile | null>(null);
+  const [customerUser, setCustomerUser] = useState<UserProfile | null>(null);
   const [businesses, setBusinesses] = useState<BusinessProfile[]>([]);
   const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -84,9 +113,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const refreshProfile = async () => {
+    const scopedHeaders = getScopedAuthHeaders();
+    try {
+      const sessions = await apiFetch<{
+        businessUser: UserProfile | null;
+        customerUser: UserProfile | null;
+        activeScope: "business" | "customer";
+      }>("/api/auth/sessions", {
+        method: "GET",
+        headers: scopedHeaders,
+      });
+      setBusinessUser(sessions.businessUser);
+      setCustomerUser(sessions.customerUser);
+    } catch {
+      setBusinessUser(null);
+      setCustomerUser(null);
+    }
+
     try {
       const data = await apiFetch<{ user: UserProfile }>("/api/auth/me", {
         method: "GET",
+        headers: scopedHeaders,
       });
       setUser(data.user);
       if (data.user.role === "business") {
@@ -108,12 +155,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const login = async (input: LoginRequest): Promise<UserProfile> => {
     setError(null);
+    if (businessUser) {
+      const message = `Already logged in as ${businessUser.email}`;
+      setError(message);
+      throw new Error(message);
+    }
     try {
       const data = await apiFetch<{ user: UserProfile }>("/api/auth/login", {
         method: "POST",
         body: JSON.stringify(input),
       });
       setUser(data.user);
+      setBusinessUser(data.user);
       if (data.user.role === "business") {
         await refreshBusinessProfiles(data.user);
       } else {
@@ -129,6 +182,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const register = async (input: RegisterRequest) => {
     setError(null);
+    if (businessUser) {
+      const message = `Already logged in as ${businessUser.email}`;
+      setError(message);
+      throw new Error(message);
+    }
     try {
       await apiFetch<{ user: UserProfile }>("/api/auth/register", {
         method: "POST",
@@ -144,12 +202,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const loginCustomerFromQr = async (input: LoginRequest & { qrToken: string }) => {
     setError(null);
+    if (customerUser) {
+      const message = `Already logged in as ${customerUser.email}`;
+      setError(message);
+      throw new Error(message);
+    }
     try {
       const data = await apiFetch<{ user: UserProfile }>("/api/auth/login", {
         method: "POST",
         body: JSON.stringify(input),
       });
       setUser(data.user);
+      setCustomerUser(data.user);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
       throw err;
@@ -160,6 +224,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     input: RegisterRequest & { role: "customer"; qrToken: string }
   ) => {
     setError(null);
+    if (customerUser) {
+      const message = `Already logged in as ${customerUser.email}`;
+      setError(message);
+      throw new Error(message);
+    }
     try {
       await apiFetch<{ user: UserProfile }>("/api/auth/register", {
         method: "POST",
@@ -176,11 +245,29 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
+  const logoutWithScope = async (scope: "business" | "customer" | "all") => {
+    await apiFetch("/api/auth/logout", {
+      method: "POST",
+      body: JSON.stringify({ scope }),
+      headers: getScopedAuthHeaders(),
+    });
+    await refreshProfile();
+  };
+
   const logout = async () => {
-    await apiFetch("/api/auth/logout", { method: "POST" });
-    setUser(null);
-    setBusinesses([]);
-    setSelectedBusinessId(null);
+    await logoutWithScope("all");
+  };
+
+  const logoutBusiness = async () => {
+    await logoutWithScope("business");
+  };
+
+  const logoutCustomer = async () => {
+    await logoutWithScope("customer");
+  };
+
+  const logoutAll = async () => {
+    await logoutWithScope("all");
   };
 
   const createBusinessProfile = async (input: CreateBusinessProfileInput) => {
@@ -224,6 +311,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const value: AuthContextType = {
     user,
+    businessUser,
+    customerUser,
     businesses,
     selectedBusiness,
     loading,
@@ -234,6 +323,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     loginCustomerFromQr,
     registerCustomerFromQr,
     logout,
+    logoutBusiness,
+    logoutCustomer,
+    logoutAll,
     refreshProfile,
     refreshBusinessProfiles,
     selectBusiness: setSelectedBusinessId,

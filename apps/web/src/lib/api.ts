@@ -61,9 +61,14 @@ export async function apiFetch<T>(
   });
 
   if (response.status === 401 && retryOn401) {
+    const qrTokenHeader =
+      typeof mergedHeaders === "object" && mergedHeaders !== null
+        ? (mergedHeaders as Record<string, string>)["x-qr-token"]
+        : undefined;
     const refreshed = await fetch(`${API_URL}/api/auth/refresh`, {
       method: "POST",
       credentials: "include",
+      headers: qrTokenHeader ? { "x-qr-token": qrTokenHeader } : undefined,
     });
     const refreshBody = await parseResponse<unknown>(refreshed);
     if (refreshBody.status === 1) {

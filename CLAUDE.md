@@ -159,8 +159,13 @@ Current API implementation (selected, high-signal routes):
 
 ### QR / Public
 - `GET /api/public/qr/:qrToken` — resolve QR token to business/table context
+- `GET /api/business/tables` — list tables (pagination/filter) with QR metadata
+- `POST /api/business/tables/bulk` — bulk create tables with QR issuance
+- `PATCH /api/business/tables/:tableId` — update table label/active state
 - `POST /api/business/tables/:tableId/qr/regenerate`
 - `GET /api/business/tables/:tableId/qr/rotations`
+- `GET /api/business/tables/:tableId/qr/download?format=png|svg`
+- `POST /api/business/tables/qr/download` — batch QR ZIP export
 
 ### Admin
 - `GET    /api/admin/businesses` — list (filter by status)
@@ -169,7 +174,6 @@ Current API implementation (selected, high-signal routes):
 
 ### Placeholders / Not fully implemented yet
 - `GET /api/business/menu` currently returns placeholder payload.
-- `GET /api/business/tables` currently returns placeholder payload.
 - `GET /api/business/orders` currently returns placeholder payload.
 - Orders/payments route namespaces are not mounted yet in `apps/api/src/index.ts`.
 
@@ -362,6 +366,12 @@ This section is the high-level source of truth for what is already implemented a
   - Menu item dietary tags and UI badges.
   - Item description support: manual input + AI generation endpoint (ADR-013).
 
+- **Layer 5 Table + QR Management**
+  - Business table lifecycle endpoints (list, bulk create, label edit, active toggle).
+  - QR token regeneration/history plus table-scoped single QR downloads (PNG/SVG).
+  - Batch QR ZIP export endpoint for active/selected tables.
+  - `/dashboard/tables` UI for table operations and QR download workflows.
+
 - **AI Assistance (ADR-010 / ADR-011 / ADR-013)**
   - Category/item suggestion endpoints with deterministic fallback behavior.
   - Dedicated AI API namespace (`/api/ai/*`).
@@ -470,6 +480,10 @@ This section is the high-level source of truth for what is already implemented a
 - Business profile edit policy in web UI now locks `name` alongside immutable slug; edit mode updates only non-name profile fields.
 - Dashboard archived-view policy: enabling `Show archived` hides non-archived operational quick actions (menu/edit/archive) so archived browsing is read-only focused.
 - ADR-019 drafted as Proposed for Layer 5: table lifecycle + QR management (bulk table creation, table updates/toggles, QR regenerate/history, and single/batch QR downloads) pending approval before implementation.
+- ADR-019 accepted and implemented for Layer 5 baseline: table listing/bulk create/update endpoints are live, QR single/batch download exports are available, and `/dashboard/tables` is now implemented with action wiring.
 - ADR-020 implemented Gemini provider-switch baseline; this decision is now superseded by ADR-022 (Gemini-only runtime).
 - ADR-021 accepted and implemented: API now enforces shared AI guardrails across both text and image generation routes, blocking unsafe prompts with `AI_PROMPT_UNSAFE` and sanitizing generated descriptions before response/fallback.
 - ADR-022 accepted and implemented: menu image generation is now Gemini-only; Nano-Banana/provider-switch paths were removed from backend runtime and env configuration.
+- ADR-023 accepted and implemented: mixed business/customer browser sessions keep one `/api/auth/*` namespace and resolve scope by `qrToken` validity, with scoped cookie handling for login/register/refresh/me/logout and no separate customer auth route tree.
+- ADR-024 accepted and implemented: auth now exposes dual-session visibility (`/api/auth/sessions`) and scoped logout controls, while web header/auth context can show both active identities and offer scope-specific login/logout actions.
+- ADR-025 accepted and implemented: auth entry flows now short-circuit when corresponding scope is already logged in (using session-state introspection), and auth dialogs across business/QR routes include explicit close controls.

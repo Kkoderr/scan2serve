@@ -166,3 +166,38 @@ pnpm lint   # run Next.js ESLint
 - Onboarding edit restrictions: existing business profiles now lock `Business name` input (read-only/disabled), matching slug immutability and allowing edits only for other fields.
 - Added onboarding regression coverage (`tests/onboarding-page.test.tsx`) to verify locked name+slug behavior for existing-profile edit mode.
 - Archived-view guard: when `Show archived` mode is active on dashboard, hide quick actions (`Manage menu`, `Edit details`, `Archive business`) regardless of previously selected active business.
+- Layer 5 web implementation: added `/dashboard/tables` (`src/app/dashboard/tables/page.tsx`) with bulk-create form, table list pagination, label save, active toggle, QR regenerate, and single/batch download actions.
+- Dashboard quick-action panel now includes a direct `Manage tables and QR` card on `src/app/dashboard/page.tsx`.
+- Added `tests/tables-page.test.tsx` to cover role guard, initial list fetch, and bulk-create API wiring.
+- Customer-flow header update: `AppHeader` now supports `audience="customer"` to suppress business/admin CTA links in customer surfaces.
+- `PublicSiteShell` now accepts `headerAudience`, and customer routes (`/menu/[slug]`, `/qr/login`, `/qr/register`) use customer-only header mode.
+- Added regression test `tests/app-header.test.tsx` to ensure customer-mode header does not render Dashboard CTA.
+- Auth scope context update: `src/lib/auth-context.tsx` now sends `x-qr-token` for `/api/auth/me` and `/api/auth/logout` when QR/menu token context is present in current route URL.
+- API refresh retry update: `src/lib/api.ts` now forwards `x-qr-token` to `/api/auth/refresh` when present on the original request headers, keeping customer refresh scope aligned on 401 retries.
+- ADR-024 web implementation:
+  - `src/lib/auth-context.tsx` now hydrates dual session identities from `GET /api/auth/sessions` (`businessUser`, `customerUser`) while retaining active `user` behavior from `/api/auth/me`,
+  - added scoped logout methods (`logoutBusiness`, `logoutCustomer`, `logoutAll`) using unified `/api/auth/logout` with optional `scope`,
+  - `src/components/layout/app-header.tsx` now renders both active identities when present and exposes scoped login/logout actions (including cross-scope login entry when one scope is missing).
+- Added/updated header and auth-context tests (`tests/app-header.test.tsx`, `tests/auth-context.test.tsx`) for dual-session and scoped-action behavior.
+- Header action UX refinement in `src/components/layout/app-header.tsx`: scoped auth actions are now grouped under two parent dropdown-style controls (`Login`, `Logout`) instead of separate flat buttons.
+- Dropdown menus include both scope options (`business`, `customer`) and keep `Logout all`; options are disabled when the corresponding session is absent.
+- Header-only auth-action policy refinement: removed extra body-level login/logout buttons from `src/app/home/page.tsx` and dashboard fallback states in `src/app/dashboard/page.tsx`; login/logout actions now live only in header dropdown controls.
+- Menu/customer-surface refinement:
+  - removed repeated QR login/register buttons from menu body in `src/app/menu/[slug]/page.tsx`,
+  - customer-mode header now excludes business-scope auth actions (`Login as business`, `Logout business`) and keeps customer-only login/logout controls.
+- ADR-025 implementation:
+  - auth context methods in `src/lib/auth-context.tsx` now guard login/register calls when target scope is already active (`businessUser`/`customerUser`) and avoid redundant auth write calls,
+  - `/login`, `/register/business`, `/qr/login`, and `/qr/register` now render `Already logged in` state when relevant scope session exists,
+  - all auth dialogs now have visible close controls wired via `ModalDialog onClose` to safe navigation (`/home` or QR flow continuation).
+- Added auth-route/dialog tests in `tests/auth-dialogs.test.tsx` and expanded `tests/auth-context.test.tsx` guard coverage.
+- Auth entry-surface refinement:
+  - default header login dropdown now exposes only `Login as business` (`src/components/layout/app-header.tsx`),
+  - customer login remains available only on customer surfaces (`headerAudience="customer"` flows).
+- Auth route simplification:
+  - removed non-dialog hero/section content from `/login`, `/register/business`, `/qr/login`, and `/qr/register`; pages now render dialog-only auth surfaces.
+- Home-page auth scope cleanup:
+  - removed direct QR login/register preview links from `src/app/home/page.tsx`; home keeps business-first entry while customer auth stays in QR/menu flow.
+- Updated `tests/app-header.test.tsx` to assert business-only login in default header mode and customer-only login/logout in customer header mode.
+- Auth dialog close-navigation refinement:
+  - updated close handlers in `/login`, `/register/business`, `/qr/login`, and `/qr/register` to prefer browser-history back (`router.back()`) before any fallback route push.
+  - this avoids forced redirection to `/home` when dialogs were opened from in-context pages (e.g., menu QR flow).

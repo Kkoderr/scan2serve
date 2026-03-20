@@ -2,11 +2,14 @@ import express from "express";
 import crypto from "crypto";
 import multer from "multer";
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
+import QRCode from "qrcode";
 import { DIETARY_TAGS } from "@scan2serve/shared";
 import { prisma } from "../prisma";
 import { asyncHandler } from "../utils/asyncHandler";
 import { sendError, sendSuccess } from "../utils/response";
 import { logger } from "../utils/logger";
+import { createZipBuffer } from "../utils/simpleZip";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { requireApprovedBusiness, resolveBusinessForUser } from "../middleware/businessApproval";
 import { suggestCategories } from "../services/menuSuggestions";
@@ -100,6 +103,27 @@ const qrRotateSchema = z.object({
 
 const qrRotationListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).optional(),
+});
+const tableListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  includeInactive: z.coerce.boolean().optional().default(true),
+});
+const tableBulkCreateSchema = z.object({
+  count: z.coerce.number().int().min(1).max(200),
+  startFrom: z.coerce.number().int().min(1).optional(),
+  labelPrefix: z.string().trim().min(1).max(40).optional(),
+});
+const tablePatchSchema = z.object({
+  label: z.string().trim().min(1).max(120).nullable().optional(),
+  isActive: z.boolean().optional(),
+});
+const qrDownloadQuerySchema = z.object({
+  format: z.enum(["png", "svg"]).default("png"),
+});
+const qrBatchDownloadSchema = z.object({
+  tableIds: z.array(z.string().min(1)).max(500).optional(),
+  format: z.enum(["png", "svg"]).default("png"),
 });
 const categoryCreateSchema = z.object({
   name: z.string().min(2).max(80),
@@ -375,6 +399,74 @@ const qrOldTokenGraceSec = Math.max(
   0,
   Number(process.env.QR_OLD_TOKEN_GRACE_SEC || 0)
 );
+
+const getPublicBaseUrl = () => (process.env.CLIENT_URL?.trim() || "http://localhost:3000").replace(/\/$/, "");
+
+const buildQrPayloadUrl = ({
+  businessSlug,
+  tableNumber,
+  token,
+}: {
+  businessSlug: string;
+  tableNumber: number;
+  token: string;
+}) =>
+  `${getPublicBaseUrl()}/menu/${encodeURIComponent(businessSlug)}?table=${tableNumber}&token=${encodeURIComponent(token)}`;
+
+const renderQrAsset = async ({
+  payloadUrl,
+  format,
+}: {
+  payloadUrl: string;
+  format: "png" | "svg";
+}): Promise<Buffer> => {
+  if (format === "svg") {
+    const svg = await QRCode.toString(payloadUrl, {
+      type: "svg",
+      errorCorrectionLevel: "M",
+      margin: 1,
+      width: 512,
+    });
+    return Buffer.from(svg, "utf8");
+  }
+
+  return QRCode.toBuffer(payloadUrl, {
+    type: "png",
+    errorCorrectionLevel: "M",
+    margin: 1,
+    width: 512,
+  });
+};
+
+const serializeTableRow = (table: {
+  id: string;
+  businessId: string;
+  tableNumber: number;
+  label: string | null;
+  isActive: boolean;
+  createdAt: Date;
+  qrCode?: {
+    id: string;
+    uniqueCode: string;
+    createdAt: Date;
+  } | null;
+}) => ({
+  id: table.id,
+  businessId: table.businessId,
+  tableNumber: table.tableNumber,
+  label: table.label,
+  isActive: table.isActive,
+  createdAt: table.createdAt.toISOString(),
+  qrCode: table.qrCode
+    ? {
+        id: table.qrCode.id,
+        uniqueCode: table.qrCode.uniqueCode,
+        createdAt: table.qrCode.createdAt.toISOString(),
+      }
+    : null,
+});
+
+type SerializedTableInput = Parameters<typeof serializeTableRow>[0];
 
 router.use(requireAuth, requireRole("business"));
 
@@ -1237,7 +1329,212 @@ router.get(
   "/tables",
   requireApprovedBusiness,
   asyncHandler(async (req, res) => {
-    sendSuccess(res, { tables: [], businessId: req.business!.id });
+    const parsed = tableListQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      sendError(res, parsed.error.message, 400, "VALIDATION_ERROR");
+      return;
+    }
+
+    const where = {
+      businessId: req.business!.id,
+      ...(parsed.data.includeInactive ? {} : { isActive: true }),
+    };
+    const skip = (parsed.data.page - 1) * parsed.data.limit;
+    const [total, rows] = await Promise.all([
+      prisma.table.count({ where }),
+      prisma.table.findMany({
+        where,
+        orderBy: { tableNumber: "asc" },
+        skip,
+        take: parsed.data.limit,
+        include: { qrCode: true },
+      }),
+    ]);
+
+    const qrCodeIds = rows
+      .map((row: { qrCode: { id: string } | null }) => row.qrCode?.id || null)
+      .filter((id: string | null): id is string => Boolean(id));
+    const latestRotations = qrCodeIds.length
+      ? await prisma.qrCodeRotation.findMany({
+          where: { qrCodeId: { in: qrCodeIds } },
+          orderBy: { createdAt: "desc" },
+        })
+      : [];
+    const latestRotationMap = new Map<string, string>();
+    for (const rotation of latestRotations) {
+      if (latestRotationMap.has(rotation.qrCodeId)) continue;
+      latestRotationMap.set(rotation.qrCodeId, rotation.createdAt.toISOString());
+    }
+
+    sendSuccess(res, {
+      tables: rows.map((row: SerializedTableInput) => ({
+        ...serializeTableRow(row),
+        lastRotatedAt: row.qrCode ? latestRotationMap.get(row.qrCode.id) || null : null,
+      })),
+      total,
+      page: parsed.data.page,
+      limit: parsed.data.limit,
+      businessId: req.business!.id,
+    });
+  })
+);
+
+router.post(
+  "/tables/bulk",
+  requireApprovedBusiness,
+  asyncHandler(async (req, res) => {
+    const parsed = tableBulkCreateSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      sendError(res, parsed.error.message, 400, "VALIDATION_ERROR");
+      return;
+    }
+
+    const business = await prisma.business.findFirst({
+      where: { id: req.business!.id },
+      select: { id: true },
+    });
+    if (!business) {
+      sendError(res, "Business not found", 404, "BUSINESS_NOT_FOUND");
+      return;
+    }
+
+    const maxExisting = await prisma.table.aggregate({
+      where: { businessId: req.business!.id },
+      _max: { tableNumber: true },
+    });
+    const startFrom = parsed.data.startFrom ?? (maxExisting._max.tableNumber ?? 0) + 1;
+    const numbers = Array.from({ length: parsed.data.count }, (_, idx) => startFrom + idx);
+    const conflicts = await prisma.table.findMany({
+      where: {
+        businessId: req.business!.id,
+        tableNumber: { in: numbers },
+      },
+      select: { tableNumber: true },
+    });
+    if (conflicts.length > 0) {
+      sendError(res, "Table numbers already exist in requested range", 409, "TABLE_NUMBER_CONFLICT");
+      return;
+    }
+
+    const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const out: Array<{
+        id: string;
+        businessId: string;
+        tableNumber: number;
+        label: string | null;
+        isActive: boolean;
+        createdAt: Date;
+        qrCode: {
+          id: string;
+          uniqueCode: string;
+          createdAt: Date;
+        } | null;
+      }> = [];
+
+      for (let idx = 0; idx < parsed.data.count; idx += 1) {
+        const tableNumber = startFrom + idx;
+        const table = await tx.table.create({
+          data: {
+            businessId: req.business!.id,
+            tableNumber,
+            label: parsed.data.labelPrefix ? `${parsed.data.labelPrefix} ${tableNumber}` : null,
+          },
+        });
+
+        let qrCode: { id: string; uniqueCode: string; createdAt: Date } | null = null;
+        for (let attempt = 0; attempt < 6; attempt += 1) {
+          try {
+            const createdQr = await tx.qrCode.create({
+              data: {
+                businessId: req.business!.id,
+                tableId: table.id,
+                uniqueCode: generateQrToken(),
+                qrImageUrl: null,
+              },
+              select: {
+                id: true,
+                uniqueCode: true,
+                createdAt: true,
+              },
+            });
+            qrCode = createdQr;
+            break;
+          } catch (error) {
+            if (!isUniqueConstraintError(error) || attempt === 5) throw error;
+          }
+        }
+
+        out.push({
+          ...table,
+          qrCode,
+        });
+      }
+      return out;
+    });
+
+    sendSuccess(
+      res,
+      {
+        tables: created.map((row: SerializedTableInput) => ({
+          ...serializeTableRow(row),
+          lastRotatedAt: null,
+        })),
+        createdCount: created.length,
+      },
+      201
+    );
+  })
+);
+
+router.patch(
+  "/tables/:tableId",
+  requireApprovedBusiness,
+  asyncHandler(async (req, res) => {
+    const parsed = tablePatchSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      sendError(res, parsed.error.message, 400, "VALIDATION_ERROR");
+      return;
+    }
+
+    if (parsed.data.label === undefined && parsed.data.isActive === undefined) {
+      sendError(res, "Nothing to update", 400, "VALIDATION_ERROR");
+      return;
+    }
+
+    const tableId = req.params.tableId;
+    if (!tableId) {
+      sendError(res, "Table id is required", 400, "VALIDATION_ERROR");
+      return;
+    }
+
+    const updated = await prisma.table.updateMany({
+      where: { id: tableId, businessId: req.business!.id },
+      data: {
+        ...(parsed.data.label !== undefined ? { label: parsed.data.label } : {}),
+        ...(parsed.data.isActive !== undefined ? { isActive: parsed.data.isActive } : {}),
+      },
+    });
+
+    if (!updated.count) {
+      sendError(res, "Table not found for business", 404, "TABLE_NOT_FOUND");
+      return;
+    }
+
+    const table = await prisma.table.findFirst({
+      where: { id: tableId, businessId: req.business!.id },
+      include: { qrCode: true },
+    });
+    if (!table) {
+      sendError(res, "Table not found for business", 404, "TABLE_NOT_FOUND");
+      return;
+    }
+
+    sendSuccess(res, {
+      table: {
+        ...serializeTableRow(table),
+        lastRotatedAt: null,
+      },
+    });
   })
 );
 
@@ -1374,6 +1671,114 @@ router.get(
         createdAt: row.createdAt.toISOString(),
       })),
     });
+  })
+);
+
+router.get(
+  "/tables/:tableId/qr/download",
+  requireApprovedBusiness,
+  asyncHandler(async (req, res) => {
+    const parsed = qrDownloadQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      sendError(res, parsed.error.message, 400, "VALIDATION_ERROR");
+      return;
+    }
+    const tableId = req.params.tableId;
+    const table = await prisma.table.findFirst({
+      where: { id: tableId, businessId: req.business!.id },
+      include: {
+        qrCode: true,
+        business: { select: { slug: true } },
+      },
+    });
+    if (!table) {
+      sendError(res, "Table not found for business", 404, "TABLE_NOT_FOUND");
+      return;
+    }
+    if (!table.qrCode) {
+      sendError(res, "QR code not found for table", 404, "QR_CODE_NOT_FOUND");
+      return;
+    }
+
+    const payloadUrl = buildQrPayloadUrl({
+      businessSlug: table.business.slug,
+      tableNumber: table.tableNumber,
+      token: table.qrCode.uniqueCode,
+    });
+    const fileData = await renderQrAsset({
+      payloadUrl,
+      format: parsed.data.format,
+    });
+    const ext = parsed.data.format === "svg" ? "svg" : "png";
+
+    res.setHeader("Content-Type", parsed.data.format === "svg" ? "image/svg+xml" : "image/png");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=\"table-${table.tableNumber}-qr.${ext}\"`
+    );
+    res.status(200).send(fileData);
+  })
+);
+
+router.post(
+  "/tables/qr/download",
+  requireApprovedBusiness,
+  asyncHandler(async (req, res) => {
+    const parsed = qrBatchDownloadSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      sendError(res, parsed.error.message, 400, "VALIDATION_ERROR");
+      return;
+    }
+
+    const tables = await prisma.table.findMany({
+      where: {
+        businessId: req.business!.id,
+        isActive: true,
+        ...(parsed.data.tableIds?.length ? { id: { in: parsed.data.tableIds } } : {}),
+      },
+      orderBy: { tableNumber: "asc" },
+      include: {
+        qrCode: true,
+        business: { select: { slug: true } },
+      },
+    });
+
+    if (parsed.data.tableIds?.length && tables.length !== parsed.data.tableIds.length) {
+      sendError(res, "Some tables were not found for this business", 404, "TABLE_NOT_FOUND");
+      return;
+    }
+    if (!tables.length) {
+      sendError(res, "No active tables available for export", 404, "TABLE_NOT_FOUND");
+      return;
+    }
+
+    const format = parsed.data.format;
+    const ext = format === "svg" ? "svg" : "png";
+    const files: Array<{ name: string; data: Buffer }> = [];
+
+    for (const table of tables) {
+      if (!table.qrCode) continue;
+      const payloadUrl = buildQrPayloadUrl({
+        businessSlug: table.business.slug,
+        tableNumber: table.tableNumber,
+        token: table.qrCode.uniqueCode,
+      });
+      const data = await renderQrAsset({ payloadUrl, format });
+      files.push({
+        name: `table-${table.tableNumber}-qr.${ext}`,
+        data,
+      });
+    }
+
+    if (!files.length) {
+      sendError(res, "QR codes not found for selected tables", 404, "QR_CODE_NOT_FOUND");
+      return;
+    }
+
+    const zip = createZipBuffer(files);
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename=\"tables-qr-${ext}.zip\"`);
+    res.status(200).send(zip);
   })
 );
 

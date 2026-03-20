@@ -2,19 +2,14 @@
 
 import React from "react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../lib/auth-context";
-import { BusinessLoginForm, BusinessRegisterForm } from "../../components/auth/business-auth-forms";
 import { PublicSiteShell } from "../../components/public/public-site-shell";
-import { ModalDialog } from "../../components/ui/modal-dialog";
-
-type AuthMode = "login" | "register" | null;
 
 export default function HomePage() {
-  const { user, loading, logout } = useAuth();
+  const { user, loading } = useAuth();
   const router = useRouter();
-  const [authMode, setAuthMode] = useState<AuthMode>(null);
 
   const profileAction = useMemo(() => {
     if (!user) return null;
@@ -23,25 +18,8 @@ export default function HomePage() {
     return { label: "Stay on home", href: "/home" };
   }, [user]);
 
-  const unauthActions = !loading && !user ? (
-    <div className="flex items-center gap-2">
-      <button
-        onClick={() => setAuthMode("login")}
-        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700"
-      >
-        Login
-      </button>
-      <button
-        onClick={() => setAuthMode("register")}
-        className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white"
-      >
-        Register business
-      </button>
-    </div>
-  ) : null;
-
   return (
-    <PublicSiteShell headerRight={unauthActions}>
+    <PublicSiteShell>
       <section className="grid gap-6 rounded-3xl border border-slate-200 bg-white/90 p-6 shadow-sm md:grid-cols-2 md:p-8">
         <div>
           <p className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-800">
@@ -56,18 +34,12 @@ export default function HomePage() {
           </p>
           {!user && !loading ? (
             <div className="mt-7 flex flex-wrap gap-3">
-              <button
-                onClick={() => setAuthMode("register")}
+              <Link
+                href="/register/business"
                 className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white"
               >
                 Start with business signup
-              </button>
-              <button
-                onClick={() => setAuthMode("login")}
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700"
-              >
-                Login
-              </button>
+              </Link>
             </div>
           ) : null}
         </div>
@@ -111,12 +83,6 @@ export default function HomePage() {
                 {profileAction.label}
               </button>
             ) : null}
-            <button
-              onClick={logout}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700"
-            >
-              Logout
-            </button>
           </div>
         </section>
       ) : null}
@@ -124,41 +90,10 @@ export default function HomePage() {
       <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="font-display text-3xl text-slate-900">Customer QR access</h2>
         <p className="mt-2 text-sm text-slate-600">
-          Customer login/register is available from QR routes and now follows dialog-style UX.
+          Customer login/register is available only from QR/menu flows and uses dialog-based auth.
         </p>
-        <div className="mt-4 flex flex-wrap gap-3">
-          <Link
-            href="/qr/login?token=valid-qr-live-token-123456"
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700"
-          >
-            Preview QR login
-          </Link>
-          <Link
-            href="/qr/register?token=valid-qr-live-token-123456"
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700"
-          >
-            Preview QR register
-          </Link>
-        </div>
       </section>
 
-      <ModalDialog
-        open={authMode === "login"}
-        title="Welcome back"
-        subtitle="Login to continue with your business account."
-        onClose={() => setAuthMode(null)}
-      >
-        <BusinessLoginForm onSuccess={() => setAuthMode(null)} />
-      </ModalDialog>
-
-      <ModalDialog
-        open={authMode === "register"}
-        title="Create business account"
-        subtitle="Start with your work email and secure password."
-        onClose={() => setAuthMode(null)}
-      >
-        <BusinessRegisterForm onSuccess={() => setAuthMode(null)} />
-      </ModalDialog>
     </PublicSiteShell>
   );
 }

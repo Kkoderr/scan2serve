@@ -8,16 +8,18 @@ type PublicSiteShellProps = {
   children: React.ReactNode;
   headerRight?: React.ReactNode;
   headerLeftMeta?: React.ReactNode;
+  headerAudience?: "default" | "customer";
 };
 
 export function PublicSiteShell({
   children,
   headerRight,
   headerLeftMeta,
+  headerAudience = "default",
 }: PublicSiteShellProps) {
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_#f9f3ea_0,_#f7f8fb_42%,_#f3f5fa_100%)] text-slate-900">
-      <AppHeader leftMeta={headerLeftMeta} rightSlot={headerRight} />
+      <AppHeader leftMeta={headerLeftMeta} rightSlot={headerRight} audience={headerAudience} />
 
       <main className="mx-auto w-full max-w-6xl px-6 py-10">
         <BodyBackButton className="mb-4" />

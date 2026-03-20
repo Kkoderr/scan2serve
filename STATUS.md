@@ -11,30 +11,28 @@
 
 **Date:** 2026-03-20
 **What was done:**
-- Accepted ADR-022 and moved menu image generation runtime to Gemini-only.
-- Removed Nano-Banana/provider-switch implementation from `apps/api/src/services/aiImageProvider.ts`; generation now always uses Gemini REST path.
-- Removed stale provider env surface from API config and compose:
-  - removed `AI_IMAGE_PROVIDER`, `NANOBANANA_API_URL`, `NANOBANANA_API_KEY`, `NANOBANANA_MODEL`,
-  - kept Gemini keys (`GEMINI_API_KEY`, `GEMINI_API_URL`, `GEMINI_IMAGE_MODEL`) + timeout.
-- Updated provider tests in `apps/api/tests/aiImageProvider.test.ts` to validate Gemini-only behavior.
-- Fixed docker env loading issue for Gemini key by adding `env_file: ./apps/api/.env` to API service and removing hardcoded empty `GEMINI_API_KEY` compose override.
-- Recreated API container and verified runtime Gemini env is loaded from `.env`.
-- Revalidated API suite:
-  - `pnpm --filter @scan2serve/api test` passes (`57/57`).
+- Diagnosed auth-dialog redirect issue: dialog close handlers were using forced route pushes (`/home` or `/qr/:token`) instead of returning to previous page context.
+- Updated auth dialog pages to use history-first close behavior:
+  - `apps/web/src/app/(auth)/login/page.tsx`
+  - `apps/web/src/app/(auth)/register/business/page.tsx`
+  - `apps/web/src/app/qr/login/page.tsx`
+  - `apps/web/src/app/qr/register/page.tsx`
+- Close behavior now:
+  - if browser history exists: `router.back()`
+  - fallback only when needed (home or qr token route).
+- Revalidated web tests after change:
+  - `pnpm --filter @scan2serve/web test -- tests/auth-dialogs.test.tsx tests/app-header.test.tsx`
+  - full suite also passes (`38/38`).
 
 **What's NOT done yet:**
-- ADR-019 (Layer 5) is still Proposed; table/QR implementation has not started.
-- End-to-end live verification of Gemini image generation response quality is still pending.
-- Cleanup queue monitoring endpoint/dashboard is not implemented yet (logs-only observability).
-- Layer 5+ features (tables/QR advanced flows, ordering/payments, dashboards) remain pending.
-- Production cookie/CORS hardening review still pending once deploy targets are fixed.
-- UI professionalism polish pass is deferred until QR scanning and end-to-end customer flows are fully in place (current redesign kept as interim baseline).
+- Live browser validation is still pending for the latest history-first close behavior in real navigation flows.
+- Optional mixed-session hardening remains open: extend `/api/auth/sessions` and scope resolver to honor QR grace-rotation tokens if product requires it.
+- Layer 6+ feature work remains pending.
 
-**Next step:** Get ADR-019 approval, then implement Layer 5
-1. Approve ADR-019 (table + QR scope/contracts).
-2. Replace placeholder table endpoints with full Layer 5 API behavior.
-3. Implement `/dashboard/tables` UI for bulk create, edits/toggles, regenerate, and QR downloads.
-4. Add API/web tests for Layer 5 flows and keep cleanup-observability follow-ups queued after baseline lands.
+**Next step:** Validate auth dialog close behavior live, then continue Layer 6
+1. Verify `/login`, `/register/business`, `/qr/login`, `/qr/register` close buttons always return to prior page in browser flow.
+2. Recheck QR menu flow (`menu -> login as customer -> close -> reopen`) for token/context stability.
+3. Start Layer 6 ADR and implementation for real public menu/cart flow.
 
 **Build progress:**
 ```
@@ -42,8 +40,8 @@ Layer 1:  Foundation          ✅ DONE
 Layer 2:  Authentication      ✅ DONE
 Layer 3:  Business Onboarding ✅ DONE
 Layer 4:  Menu Management     ✅ DONE
-Layer 5:  Table & QR Codes    ← NEXT
-Layer 6:  Public Menu & Cart
+Layer 5:  Table & QR Codes    ✅ DONE
+Layer 6:  Public Menu & Cart  ⏳ PENDING
 Layer 7:  Ordering & Payments
 Layer 8:  Order Management
 Layer 9:  Business Dashboard
@@ -565,6 +563,88 @@ Layer 11: Polish & Deploy
 - Added API `env_file` loading from `./apps/api/.env` and removed hardcoded empty `GEMINI_API_KEY` override.
 - Recreated API service and verified runtime env inside container includes non-empty `GEMINI_API_KEY`.
 
+### 2026-03-20 — Session 83: ADR-019 accepted + Layer 5 API/web baseline implemented
+- Marked `docs/adr/ADR-019-layer5-table-and-qr-management.md` as Accepted.
+- Implemented Layer 5 API routes in `apps/api/src/routes/business.ts`: table list/bulk create/update and QR single/batch download contracts.
+- Added QR batch ZIP utility `apps/api/src/utils/simpleZip.ts`.
+- Added Layer 5 API tests in `apps/api/tests/tableRoutes.test.ts`.
+- Implemented `/dashboard/tables` in web (`apps/web/src/app/dashboard/tables/page.tsx`) and added dashboard entry action in `apps/web/src/app/dashboard/page.tsx`.
+- Added web tests in `apps/web/tests/tables-page.test.tsx`.
+- Revalidated test/build gates for API and web after implementation.
+
+### 2026-03-20 — Session 84: Customer-only header mode for QR/menu surfaces
+- Added `audience="customer"` support to `apps/web/src/components/layout/app-header.tsx`.
+- Extended `apps/web/src/components/public/public-site-shell.tsx` with `headerAudience` prop.
+- Applied customer-only header audience to `/menu/[slug]`, `/qr/login`, and `/qr/register` pages.
+- Added `apps/web/tests/app-header.test.tsx` to ensure dashboard CTA is hidden in customer audience mode.
+
+### 2026-03-20 — Session 85: ADR-023 drafted thoroughly for mixed session scope isolation
+- Created and expanded `docs/adr/ADR-023-mixed-session-scope-isolation.md` as `Proposed`.
+- Updated ADR-023 to keep a single `/api/auth/*` namespace and resolve customer vs business scope from `qrToken` validity, including refresh/me/logout behavior and mixed-session guardrails.
+- Synced ADR metadata into `docs/CLAUDE.md` and root `CLAUDE.md`.
+
+### 2026-03-20 — Session 86: ADR-023 accepted + unified auth scope implementation
+- Marked ADR-023 as `Accepted` and implemented unified scope behavior in `apps/api/src/routes/auth.ts` using qrToken validity.
+- Updated `/api/auth/*` handlers (register/login/refresh/logout/me) to use scoped cookie ownership without route splitting.
+- Updated web auth bootstrap/retry/logout scope propagation (`apps/web/src/lib/auth-context.tsx`, `apps/web/src/lib/api.ts`) to forward `x-qr-token` in QR/menu contexts.
+- Updated `apps/api/tests/authRoutes.test.ts` for new scope behavior and revalidated API/web tests + builds.
+
+### 2026-03-20 — Session 87: Customer token-path bug fix for mixed sessions
+- Fixed customer access-cookie path in `apps/api/src/routes/auth.ts` from `/qr` to `/` so `/api/auth/me` receives `qr_customer_access` in customer scope.
+- Preserved token separation by cookie names for business and customer auth (`access_token`/`refresh_token` vs `qr_customer_access`/`qr_customer_refresh`).
+- Revalidated API suite and build after fix (`62/62` tests passing).
+
+### 2026-03-20 — Session 88: ADR-024 accepted + dual-session visibility/scoped logout
+- Marked ADR-024 as `Accepted` and implemented `GET /api/auth/sessions` plus scoped `POST /api/auth/logout` body contract (`business|customer|all`) in `apps/api/src/routes/auth.ts`.
+- Updated auth context and header UI in web to surface both active session identities and allow scoped logout with cross-scope login actions.
+- Added/updated API and web tests for dual-session and scoped actions; revalidated API/web test and build pipelines.
+
+### 2026-03-20 — Session 89: Header actions grouped into Login/Logout dropdowns
+- Updated header action UX in `apps/web/src/components/layout/app-header.tsx` to provide two parent dropdown-style controls (`Login`, `Logout`) with both scope options under each.
+- Kept ADR-024 scoped behavior intact while reducing header clutter from multiple flat action buttons.
+- Updated header tests and revalidated web tests/build and API build.
+
+### 2026-03-20 — Session 90: Header-only login/logout action enforcement
+- Removed remaining non-header login/logout buttons from home and dashboard fallback UIs to enforce two-dropdown-only auth action model in headers.
+- Kept registration and non-auth CTAs intact while constraining login/logout to header controls.
+- Updated home/header tests and revalidated web tests/build.
+
+### 2026-03-20 — Session 91: Menu page auth-control cleanup + customer-only header actions
+- Removed duplicate QR login/register controls from menu page body so auth controls are not repeated outside header dropdowns.
+- Updated customer-audience header to hide business-scope login/logout options specifically on customer/menu surfaces.
+- Revalidated web tests and build after customer-header/menu refinements.
+
+### 2026-03-20 — Session 92: ADR-025 accepted + auth-entry guard and dialog close controls
+- Marked ADR-025 as `Accepted`.
+- Added auth-context pre-submit guards to prevent login/register auth API calls when the target scope is already logged in.
+- Updated business and QR auth routes to display `Already logged in` state with continue CTAs, and added close buttons to all auth dialogs.
+- Added dialog and guard test coverage; revalidated web tests/build.
+
+### 2026-03-20 — Session 93: Live mixed-session API runtime matrix verification
+- Ran live API checks against local running stack with one cookie jar simulating same-browser mixed sessions.
+- Confirmed dual-session visibility, active-scope switching by QR context header, and scoped logout behavior (`business`/`customer`) work as expected.
+- Noted current `activeScope` semantics: defaults to `business` when QR context is absent, independent of whether `customerUser` is present.
+
+### 2026-03-20 — Session 94: Auth-page dialog-only cleanup + login-surface scoping
+- Updated `apps/web/src/components/layout/app-header.tsx` so default audience login dropdown exposes only business login; customer login remains customer-audience only.
+- Removed non-dialog content blocks from auth routes:
+  - `apps/web/src/app/(auth)/login/page.tsx`
+  - `apps/web/src/app/(auth)/register/business/page.tsx`
+  - `apps/web/src/app/qr/login/page.tsx`
+  - `apps/web/src/app/qr/register/page.tsx`
+- Removed direct QR auth preview links from `apps/web/src/app/home/page.tsx` to keep customer auth entry in QR/menu flow.
+- Extended `apps/web/tests/app-header.test.tsx` to assert default-vs-customer auth option visibility.
+- Revalidated web test and build pipelines successfully.
+
+### 2026-03-20 — Session 95: Auth dialog close uses browser history first
+- Investigated continued redirect complaints on auth dialog pages and identified forced close navigation (`router.push`) as root cause.
+- Updated close handlers to use `router.back()` when possible, with fallback only for no-history cases:
+  - `apps/web/src/app/(auth)/login/page.tsx`
+  - `apps/web/src/app/(auth)/register/business/page.tsx`
+  - `apps/web/src/app/qr/login/page.tsx`
+  - `apps/web/src/app/qr/register/page.tsx`
+- Revalidated web tests after close-navigation changes (full suite passing).
+
 ---
 
 ## Decisions Log
@@ -587,10 +667,13 @@ Layer 11: Polish & Deploy
 | ADR-016 | Onboarding auto-slug, currency input, and drag-drop logo upload | Remove manual slug edits, enforce server-side unique slug generation, collect currency, and replace logo URL field with uploaded image flow | 2026-03-20 |
 | ADR-017 | Dashboard logos + business archive lifecycle with 30-day retention delete | Improve dashboard identity using logos, replace destructive delete with reversible archive window, and enforce eventual hard delete with audit trail | 2026-03-20 |
 | ADR-018 | Sitewide public UI redesign with home/QR auth dialogs | Introduce structured public shell, home hero/profile sections, light visual system, and dialog-based auth UX while retaining fallback auth routes | 2026-03-20 |
-| ADR-019 | Layer 5 table + QR management contracts | Define implementation scope for table lifecycle, QR regeneration/history continuity, and QR download/export before Layer 5 coding | 2026-03-20 (Proposed) |
+| ADR-019 | Layer 5 table + QR management contracts | Define implementation scope for table lifecycle, QR regeneration/history continuity, and QR download/export before Layer 5 coding | 2026-03-20 |
 | ADR-020 | Gemini REST runtime for non-banana image provider | Add production-grade non-banana image generation path using Gemini REST APIs while preserving provider-switch compatibility and graceful fallbacks | 2026-03-20 |
 | ADR-021 | Guardrails for text and image generation | Add shared backend AI guardrails to block unsafe prompts and sanitize generated menu text across generation endpoints | 2026-03-20 |
 | ADR-022 | Gemini-only image generation runtime | Simplify menu image generation by removing Nano-Banana/provider switching and standardizing on Gemini REST only | 2026-03-20 |
+| ADR-023 | Unified auth routes with QR-token scope resolution | Keep a single `/api/auth/*` surface and prevent cross-scope bleed by resolving customer scope from valid `qrToken` while maintaining strict cookie isolation | 2026-03-20 |
+| ADR-024 | Dual-session visibility and scoped logout in unified auth | Show both valid business/customer sessions concurrently and allow explicit scoped logout/login actions without splitting auth route namespaces | 2026-03-20 |
+| ADR-025 | Auth entry already-logged-in guard + dialog close controls | Prevent redundant auth writes when scope session already exists and ensure all auth dialogs expose explicit close actions with safe navigation | 2026-03-20 |
 
 ---
 

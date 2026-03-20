@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { Suspense } from "react";
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
@@ -10,7 +11,7 @@ import { PublicSiteShell } from "../../../components/public/public-site-shell";
 import { ModalDialog } from "../../../components/ui/modal-dialog";
 
 function QrRegisterContent() {
-  const { registerCustomerFromQr, error } = useAuth();
+  const { registerCustomerFromQr, customerUser, error } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const qrToken = searchParams.get("token") ?? "";
@@ -48,59 +49,78 @@ function QrRegisterContent() {
     }
   };
 
+  const closeDialog = () => {
+    if (window.history.length > 1) {
+      router.back();
+      return;
+    }
+    if (qrToken) {
+      router.push(`/qr/${encodeURIComponent(qrToken)}`);
+      return;
+    }
+    router.push("/home");
+  };
+
   if (!qrToken) return null;
 
   return (
-    <PublicSiteShell>
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="font-display text-3xl text-slate-900">QR access registration</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Create a customer account to continue for this table.
-        </p>
-      </section>
-
+    <PublicSiteShell headerAudience="customer">
       <ModalDialog
         open
         title="Create QR customer account"
         subtitle="Register and continue in the current table context."
+        onClose={closeDialog}
       >
-        <form className="space-y-4" onSubmit={onSubmit}>
-          <div>
-            <label className="block text-sm font-medium text-slate-700">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              required
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none ring-amber-200 transition focus:ring-2"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none ring-amber-200 transition focus:ring-2"
-            />
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <Link
-              href={`/qr/login?token=${encodeURIComponent(qrToken)}`}
-              className="text-sm font-medium text-slate-700 underline underline-offset-4"
-            >
-              Already have account?
-            </Link>
+        {customerUser ? (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-700">Already logged in as {customerUser.email}.</p>
             <button
-              type="submit"
-              disabled={loading}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              type="button"
+              onClick={() => router.push(`/qr/${encodeURIComponent(qrToken)}`)}
+              className="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white"
             >
-              {loading ? "Creating..." : "Create account"}
+              Continue
             </button>
           </div>
-        </form>
+        ) : (
+          <form className="space-y-4" onSubmit={onSubmit}>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none ring-amber-200 transition focus:ring-2"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none ring-amber-200 transition focus:ring-2"
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <Link
+                href={`/qr/login?token=${encodeURIComponent(qrToken)}`}
+                className="text-sm font-medium text-slate-700 underline underline-offset-4"
+              >
+                Already have account?
+              </Link>
+              <button
+                type="submit"
+                disabled={loading}
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              >
+                {loading ? "Creating..." : "Create account"}
+              </button>
+            </div>
+          </form>
+        )}
       </ModalDialog>
     </PublicSiteShell>
   );

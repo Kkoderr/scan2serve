@@ -23,7 +23,6 @@ export default function DashboardPage() {
   const {
     user,
     loading,
-    logout,
     businesses,
     selectedBusiness,
     selectBusiness,
@@ -84,12 +83,6 @@ export default function DashboardPage() {
         <section className="mx-auto flex min-h-[60vh] max-w-6xl flex-col items-center justify-center space-y-4 p-6">
           <h1 className="text-3xl font-semibold">Welcome, {user.email}</h1>
           <p className="text-gray-600">Role: {user.role}</p>
-          <button
-            onClick={logout}
-            className="rounded-md bg-black px-4 py-2 text-white"
-          >
-            Logout
-          </button>
         </section>
       </main>
     );
@@ -121,12 +114,6 @@ export default function DashboardPage() {
               className="rounded-md bg-black px-4 py-2 text-white"
             >
               Start onboarding
-            </button>
-            <button
-              onClick={logout}
-              className="rounded-md border border-gray-300 px-4 py-2"
-            >
-              Logout
             </button>
           </div>
         </section>
@@ -281,6 +268,13 @@ export default function DashboardPage() {
                 <p className="mt-2 text-sm text-slate-700">
                   Edit categories, prices, availability, and images.
                 </p>
+              </button>
+              <button
+                onClick={() => router.push("/dashboard/tables")}
+                className="w-full rounded-xl border border-sky-200 bg-gradient-to-br from-sky-100 via-cyan-100 to-teal-100 p-4 text-left shadow-sm transition hover:scale-[1.01] hover:shadow-md"
+              >
+                <p className="text-xl font-semibold text-slate-900">Manage tables and QR</p>
+                <p className="mt-1 text-sm text-slate-700">Create tables, rotate codes, and export downloads.</p>
               </button>
               <div className="flex items-start gap-2">
                 <button
