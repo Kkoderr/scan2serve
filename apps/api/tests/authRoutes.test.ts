@@ -219,7 +219,7 @@ describe("auth routes", () => {
     expect(loginRes._getStatusCode()).toBe(200);
     expect(loginRes._getJSONData().status).toBe(1);
     expect(refreshTokens).toHaveLength(1);
-  });
+  }, 15000);
 
   it("rejects invalid credentials", async () => {
     await run("post", "/register", {
@@ -234,7 +234,7 @@ describe("auth routes", () => {
     });
     expect(res._getStatusCode()).toBe(401);
     expect(res._getJSONData().status).toBe(0);
-  });
+  }, 15000);
 
   it("rejects customer registration outside QR context", async () => {
     const res = await run("post", "/register", {

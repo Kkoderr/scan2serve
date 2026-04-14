@@ -17,4 +17,6 @@ fi
 
 echo "Starting production stack..."
 
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+PROJECT_NAME="scan2serve-prod"
+
+docker compose --project-name "$PROJECT_NAME" -f docker-compose.prod.yml --env-file .env.prod up -d

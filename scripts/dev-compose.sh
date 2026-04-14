@@ -5,4 +5,6 @@ set -euo pipefail
 # Tests are not run here; use scripts/test-compose.sh.
 # Requires Docker/Compose available on host.
 
-docker compose up --build
+PROJECT_NAME="scan2serve-dev"
+
+docker compose --project-name "$PROJECT_NAME" up --build

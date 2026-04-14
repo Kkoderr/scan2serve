@@ -34,6 +34,15 @@ WEB_BUILD_ARGS=()
 if [ -n "${NEXT_PUBLIC_API_URL:-}" ]; then
   WEB_BUILD_ARGS+=(--build-arg "NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}")
 fi
+if [ -n "${NEXT_PUBLIC_SITE_URL:-}" ]; then
+  WEB_BUILD_ARGS+=(--build-arg "NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}")
+fi
+if [ -n "${NEXT_PUBLIC_APP_URL:-}" ]; then
+  WEB_BUILD_ARGS+=(--build-arg "NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}")
+fi
+if [ -n "${NEXT_PUBLIC_ENABLE_CUSTOMER_QR_AUTH:-}" ]; then
+  WEB_BUILD_ARGS+=(--build-arg "NEXT_PUBLIC_ENABLE_CUSTOMER_QR_AUTH=${NEXT_PUBLIC_ENABLE_CUSTOMER_QR_AUTH}")
+fi
 
 echo "Building production images (tag: $TAG)..."
 

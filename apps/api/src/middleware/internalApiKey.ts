@@ -4,6 +4,7 @@ import { logger } from "../utils/logger";
 const PUBLIC_EXACT_PATHS = new Set([
   "/healthz",
   "/api/health",
+  "/metrics",
   "/api/auth/login",
   "/api/auth/register",
   "/api/auth/refresh",

@@ -19,10 +19,12 @@ import { startOrderPartitionMaintenance } from "./services/orderPartitionMainten
 import { startReviewMigrationWorker } from "./services/reviewMigration";
 import { requireInternalApiKey } from "./middleware/internalApiKey";
 import { metricsMiddleware, metricsRegistry } from "./metrics";
+import { getConfiguredCorsOrigins, isAllowedOrigin } from "./utils/origins";
 
 const app: express.Express = express();
 const PORT = process.env.PORT || 4000;
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
+const CORS_ORIGINS = getConfiguredCorsOrigins();
 
 // ─── Global Middleware ──────────────────────────────────────
 // helmet: sets security headers (X-Content-Type-Options, X-Frame-Options, etc.)
@@ -31,7 +33,12 @@ app.use(helmet());
 // cors: allows requests from the Next.js frontend only
 app.use(
   cors({
-    origin: CLIENT_URL,
+    origin: (origin, callback) => {
+      if (isAllowedOrigin(origin, CORS_ORIGINS)) {
+        return callback(null, true);
+      }
+      return callback(null, false);
+    },
     credentials: true,
   })
 );
@@ -163,6 +170,7 @@ if (process.env.NODE_ENV !== "test") {
       port: Number(PORT),
       env: process.env.NODE_ENV || "development",
       clientUrl: CLIENT_URL,
+      corsOrigins: CORS_ORIGINS,
       pid: process.pid,
     });
   });

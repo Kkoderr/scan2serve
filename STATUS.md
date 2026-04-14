@@ -13,6 +13,8 @@
 **What was done:**
 - Fixed Prisma enum mapping mismatch for org subscriptions by mapping Prisma enums to the snake_case Postgres types.
 - Updated sample data seed to create an `org_subscriptions` row for the seeded org (trial period).
+- Implemented ADR-059 for ngrok-friendly usage: `CORS_ORIGINS` + `QR_BASE_URL`, and updated QR payload generation to use `QR_BASE_URL` when set.
+- Reinstalled dependencies (network) and re-ran API + web test suites; both pass.
 
 **What's NOT done yet:**
 - Apply the migration (`20260413160000_org_subscriptions`) in the dev DB volume currently used by `dev-compose.sh` (reset volume first if needed).
@@ -20,6 +22,7 @@
 **Next step:**
 1. Restart `./scripts/dev-compose.sh` so the API re-runs `db:migrate:deploy` with the updated Prisma enum mappings.
 2. Re-run `pnpm --filter @scan2serve/api db:seed:sample` if you want the org subscription sample row created.
+3. Set `QR_BASE_URL` + `CORS_ORIGINS` in `apps/api/.env` before starting ngrok + compose for phone testing.
 
 **Build progress:**
 ```
@@ -1535,3 +1538,8 @@ pnpm --filter @scan2serve/api db:seed      # seed admin user
 
 ### 2026-04-14 — Session: ADR-059 scrapped
 - Removed ADR-059 draft files per user request.
+
+### 2026-04-14 — Session: ADR-059 ngrok support
+- Implemented `CORS_ORIGINS` (comma-separated) for API CORS config and `QR_BASE_URL` for QR payload base origin; updated env example and tests.
+- Fixed web same-origin API base handling so `NEXT_PUBLIC_API_URL="/"` does not generate scheme-relative `//api/...` requests (prevents CSRF failures).
+- Made Prometheus scraping work in compose/prod: `/metrics` no longer requires `INTERNAL_API_KEY` and Prometheus config no longer sends a placeholder bearer token.

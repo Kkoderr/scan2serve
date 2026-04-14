@@ -195,3 +195,5 @@ Project documentation for architecture decisions, process notes, and operational
 
 ## Updates 2026-04-14
 - (Removed) Drafted ADR-059 for org trial activation flow; user decided to proceed without an ADR.
+- Updated ADR-059 with ngrok-first intent (public gateway URL), plus CORS/QR base URL/CSRF considerations and open questions (`docs/adr/ADR-059.md`).
+- Accepted and implemented ADR-059: configurable `CORS_ORIGINS` + `QR_BASE_URL` for ngrok-friendly gateway access (`docs/adr/ADR-059.md`, `apps/api/src/index.ts`, `apps/api/src/routes/business.ts`).

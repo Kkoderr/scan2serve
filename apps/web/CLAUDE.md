@@ -538,3 +538,4 @@ pnpm lint   # run Next.js ESLint
 ## Updates 2026-04-14
 - Added React import to root app page to satisfy Vitest runtime (`src/app/page.tsx`).
 - Mocked subscription gate in dashboard/menu tests and updated pending-business expectation accordingly (`tests/dashboard.test.tsx`, `tests/menu-page.test.tsx`).
+- Treated `NEXT_PUBLIC_API_URL="/"` as same-origin (empty base) to avoid scheme-relative `//api/...` fetches that break CSRF (`src/lib/api.ts`).

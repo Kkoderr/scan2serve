@@ -534,7 +534,18 @@ const qrOldTokenGraceSec = Math.max(
   Number(process.env.QR_OLD_TOKEN_GRACE_SEC || 0)
 );
 
-const getPublicBaseUrl = () => (process.env.CLIENT_URL?.trim() || "http://localhost:3000").replace(/\/$/, "");
+const getPublicBaseUrl = () => {
+  const fallback = process.env.CLIENT_URL?.trim() || "http://localhost:3000";
+  const raw = process.env.QR_BASE_URL?.trim();
+  const candidate = raw && raw.length > 0 ? raw : fallback;
+
+  try {
+    const parsed = new URL(candidate);
+    return parsed.origin.replace(/\/$/, "");
+  } catch {
+    return candidate.replace(/\/$/, "");
+  }
+};
 
 const buildQrPayloadUrl = ({
   businessSlug,

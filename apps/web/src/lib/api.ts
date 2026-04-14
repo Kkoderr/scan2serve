@@ -21,6 +21,7 @@ const getPort = (host: string, protocol: string) => {
 
 const resolveApiBase = () => {
   if (!API_URL) return "";
+  if (API_URL === "/") return "";
   if (API_URL.startsWith("/")) return API_URL;
   if (typeof window === "undefined") return API_URL;
 

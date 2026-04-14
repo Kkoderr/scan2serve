@@ -17,17 +17,19 @@ fi
 
 echo "Running production migrations..."
 
-docker compose -f docker-compose.prod.yml --env-file .env.prod exec api \
+PROJECT_NAME="scan2serve-prod"
+
+docker compose --project-name "$PROJECT_NAME" -f docker-compose.prod.yml --env-file .env.prod exec api \
   pnpm --filter @scan2serve/api db:migrate:deploy
 
 echo "Seeding admin user..."
 
-docker compose -f docker-compose.prod.yml --env-file .env.prod exec api \
+docker compose --project-name "$PROJECT_NAME" -f docker-compose.prod.yml --env-file .env.prod exec api \
   pnpm --filter @scan2serve/api db:seed
 
 echo "Seeding sample data..."
 
-docker compose -f docker-compose.prod.yml --env-file .env.prod exec api \
+docker compose --project-name "$PROJECT_NAME" -f docker-compose.prod.yml --env-file .env.prod exec api \
   pnpm --filter @scan2serve/api db:seed:sample
 
 echo "Done."

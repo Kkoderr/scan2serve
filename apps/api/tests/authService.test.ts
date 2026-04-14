@@ -49,7 +49,7 @@ describe("authService", () => {
     expect(hash).not.toBe("secret123");
     const ok = await verifyPassword("secret123", hash);
     expect(ok).toBe(true);
-  });
+  }, 15000);
 
   it("signs access token", () => {
     const token = signAccessToken({

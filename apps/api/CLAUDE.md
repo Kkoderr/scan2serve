@@ -202,6 +202,11 @@ pnpm db:studio    # open Prisma Studio GUI
 ## Updates 2026-04-14
 - Sample seed now ensures the sample org has an `org_subscriptions` row (`scripts/seed-sample-data.ts`).
 
+- Added ngrok-friendly env configuration:
+  - `CORS_ORIGINS` (comma-separated) controls API CORS origins (fallback to `CLIENT_URL`) (`src/index.ts`).
+  - `QR_BASE_URL` controls table QR payload base origin (fallback to `CLIENT_URL`) (`src/routes/business.ts`).
+- Allowed `/metrics` without `INTERNAL_API_KEY` so Prometheus can scrape the API in compose without custom headers (`src/middleware/internalApiKey.ts`).
+
 ## Updates 2026-04-11
 - Added OrderPin back-relations to `User`, `Business`, and `Order` for Prisma validation (`prisma/schema.prisma`).
 - Sample seed now populates `paymentActors` for cash-paid orders and seeds per-user order pins (`scripts/seed-sample-data.ts`).
