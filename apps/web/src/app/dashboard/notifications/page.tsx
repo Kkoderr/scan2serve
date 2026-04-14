@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import type { BusinessNotification } from "@scan2serve/shared";
 import { apiFetch } from "../../../lib/api";
+import { useSubscriptionGate } from "../../../lib/subscription";
 import { AppHeader } from "../../../components/layout/app-header";
 import { BodyBackButton } from "../../../components/layout/body-back-button";
 
@@ -23,6 +24,7 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<BusinessNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const subscriptionGate = useSubscriptionGate();
 
   useEffect(() => {
     const load = async () => {
@@ -42,6 +44,28 @@ export default function NotificationsPage() {
     };
     void load();
   }, []);
+
+  if (subscriptionGate.loading) {
+    return (
+      <main className="min-h-screen bg-gray-50">
+        <AppHeader leftMeta="Notifications" />
+        <section className="mx-auto flex min-h-[60vh] max-w-5xl items-center justify-center p-6">
+          <p>Loading...</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (subscriptionGate.blocked) {
+    return (
+      <main className="min-h-screen bg-gray-50">
+        <AppHeader leftMeta="Notifications" />
+        <section className="mx-auto flex min-h-[60vh] max-w-5xl items-center justify-center p-6">
+          <p>Checking subscription...</p>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-gray-50">

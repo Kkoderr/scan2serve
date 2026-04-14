@@ -21,14 +21,14 @@ services:
     image: postgres:15-alpine
     environment:
       POSTGRES_DB: scan2serve
-      POSTGRES_USER: scan2serve
-      POSTGRES_PASSWORD: scan2serve
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
     ports:
       - "5432:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U scan2serve -d scan2serve"]
+      test: ["CMD-SHELL", "pg_isready -U user -d scan2serve"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -80,7 +80,7 @@ services:
       PNPM_CONFIG_CONFIRM_MODULES_PURGE: "false"
       PNPM_STORE_PATH: /pnpm-store
       COREPACK_HOME: /pnpm-store/corepack
-      DATABASE_URL: postgresql://scan2serve:scan2serve@db:5432/scan2serve
+      DATABASE_URL: postgresql://user:password@db:5432/scan2serve
       CLIENT_URL: http://localhost:3000
       S3_ENDPOINT: http://minio:9000
       S3_PUBLIC_URL: http://localhost:9000
@@ -88,7 +88,7 @@ services:
       CLICKHOUSE_DATABASE: scan2serve
       REDIS_URL: redis://redis:6379
     command: >
-      sh -c "corepack enable && pnpm install --no-frozen-lockfile --store-dir /pnpm-store && pnpm --filter @scan2serve/api db:migrate:deploy && pnpm --filter @scan2serve/api db:generate && pnpm --filter @scan2serve/api db:seed && pnpm --filter @scan2serve/api clickhouse:users && pnpm --filter @scan2serve/api clickhouse:bootstrap && pnpm --filter @scan2serve/api db:seed:sample && pnpm --filter @scan2serve/api dev"
+      sh -c "corepack enable && pnpm install --no-frozen-lockfile --store-dir /pnpm-store && pnpm --filter @scan2serve/shared build && pnpm --filter @scan2serve/api db:migrate:deploy && pnpm --filter @scan2serve/api db:generate && pnpm --filter @scan2serve/api db:seed && pnpm --filter @scan2serve/api clickhouse:users && pnpm --filter @scan2serve/api clickhouse:bootstrap && pnpm --filter @scan2serve/api db:seed:sample && pnpm --filter @scan2serve/api dev"
     depends_on:
       db:
         condition: service_healthy
@@ -192,7 +192,7 @@ services:
     command:
       - "--config.file=/postgres_exporter.yml"
     environment:
-      DATA_SOURCE_NAME: postgresql://scan2serve:scan2serve@db:5432/scan2serve?sslmode=disable
+      DATA_SOURCE_NAME: postgresql://user:password@db:5432/scan2serve?sslmode=disable
     volumes:
       - ./monitoring/postgres_exporter.yml:/postgres_exporter.yml:ro
     depends_on:

@@ -6,7 +6,13 @@ import businessRouter from "../src/routes/business";
 
 type BusinessStatus = "pending" | "approved" | "rejected" | "archived";
 type UserRecord = { id: string; email: string; role: "business" | "admin" | "customer" };
-type BusinessRecord = { id: string; userId: string; status: BusinessStatus; blocked?: boolean };
+type BusinessRecord = {
+  id: string;
+  userId: string;
+  status: BusinessStatus;
+  orgId: string | null;
+  blocked?: boolean;
+};
 type TableRecord = { id: string; businessId: string; tableNumber: number; label: string | null };
 type MenuItemRecord = { id: string; name: string };
 type OrderRecord = {
@@ -374,7 +380,7 @@ describe("Layer 8 order management routes", () => {
     orderPins.length = 0;
 
     users.push({ id: "u_business", email: "biz@example.com", role: "business" });
-    businesses.push({ id: "b_1", userId: "u_business", status: "approved" });
+    businesses.push({ id: "b_1", userId: "u_business", status: "approved", orgId: "org_1" });
     tables.push({ id: "t_1", businessId: "b_1", tableNumber: 1, label: "Main" });
     menuItems.push({ id: "m_1", name: "Samosa" });
   });

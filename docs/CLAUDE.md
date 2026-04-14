@@ -186,3 +186,12 @@ Project documentation for architecture decisions, process notes, and operational
 
 ## Updates 2026-04-13
 - Updated deployment docs to note `prod-migrate.sh` now seeds sample data (`docs/production-deploy.md`).
+
+## Updates 2026-04-13
+- Updated ADR-058 to add a free 1-month org subscription on org creation and confirmed Q&A answers (`docs/adr/ADR-058-org-subscriptions-dashboard-gating.md`).
+
+## Updates 2026-04-13
+- Accepted and implemented ADR-058 for org subscriptions, dashboard gating, and free 1-month org trial (`docs/adr/ADR-058-org-subscriptions-dashboard-gating.md`).
+
+## Updates 2026-04-14
+- (Removed) Drafted ADR-059 for org trial activation flow; user decided to proceed without an ADR.

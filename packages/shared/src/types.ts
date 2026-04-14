@@ -332,7 +332,8 @@ export type BusinessNotificationType =
   | "ORG_INVITE_RECEIVED"
   | "ORG_INVITE_ACCEPTED"
   | "ORG_INVITE_DECLINED"
-  | "BUSINESS_ACCESS_GRANTED";
+  | "BUSINESS_ACCESS_GRANTED"
+  | "SUBSCRIPTION_EXPIRED";
 
 export interface BusinessNotification {
   id: string;
@@ -344,6 +345,27 @@ export interface BusinessNotification {
   actorUserId?: string | null;
   payload?: unknown;
   createdAt: string;
+}
+
+// ─── Subscriptions ─────────────────────────────────────────
+
+export const SUBSCRIPTION_PLANS = [
+  { id: "monthly", label: "1 Month", months: 1, amount: 300, currency: "INR" },
+  { id: "quarterly", label: "3 Months", months: 3, amount: 800, currency: "INR" },
+  { id: "yearly", label: "1 Year", months: 12, amount: 2000, currency: "INR" },
+] as const;
+
+export type PaidSubscriptionPlan = (typeof SUBSCRIPTION_PLANS)[number]["id"];
+export type SubscriptionPlan = PaidSubscriptionPlan | "trial";
+
+export interface SubscriptionStatus {
+  isActive: boolean;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  plan: SubscriptionPlan | null;
+  currency: string;
+  amount: number | null;
+  daysRemaining: number | null;
 }
 
 // ─── Tables & QR ────────────────────────────────────────────

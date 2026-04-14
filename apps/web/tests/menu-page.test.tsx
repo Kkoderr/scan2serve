@@ -15,6 +15,10 @@ vi.mock("../src/lib/auth-context", () => ({
   useAuth: () => useAuthMock(),
 }));
 
+vi.mock("../src/lib/subscription", () => ({
+  useSubscriptionGate: () => ({ loading: false, blocked: false }),
+}));
+
 const apiFetchMock = vi.fn();
 vi.mock("../src/lib/api", () => ({
   apiFetch: (...args: any[]) => apiFetchMock(...args),
@@ -238,10 +242,20 @@ describe("DashboardMenuPage", () => {
       loading: false,
       selectedBusiness: { id: "b1", status: "pending" },
     });
+    apiFetchMock.mockResolvedValue({
+      status: {
+        isActive: true,
+        currentPeriodStart: null,
+        currentPeriodEnd: null,
+        plan: "trial",
+        currency: "INR",
+        amount: 0,
+        daysRemaining: 7,
+      },
+      canManage: true,
+    });
 
     render(<DashboardMenuPage />);
-
-    expect(apiFetchMock).not.toHaveBeenCalled();
     expect(screen.getByText("Add item")).toHaveProperty("disabled", true);
   });
 

@@ -16,6 +16,7 @@ import { BodyBackButton } from "../../../components/layout/body-back-button";
 import { useAuth } from "../../../lib/auth-context";
 import { apiFetch } from "../../../lib/api";
 import { showToast } from "../../../lib/toast";
+import { useSubscriptionGate } from "../../../lib/subscription";
 
 const WINDOW_LABELS: Record<AnalyticsWindow, string> = {
   today: "Today",
@@ -271,6 +272,7 @@ const emptyReviewCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } as Record<
 export default function DashboardAnalyticsPage() {
   const { user, loading, businesses, selectedBusiness } = useAuth();
   const router = useRouter();
+  const subscriptionGate = useSubscriptionGate();
   const [interval, setInterval] = useState<AnalyticsWindow>(() => {
     if (typeof window === "undefined") return "today";
     const params = new URLSearchParams(window.location.search);
@@ -610,6 +612,28 @@ export default function DashboardAnalyticsPage() {
   const failedPayments = ordersDetail?.failedPaymentCount ?? null;
   const refundedPayments = ordersDetail?.refundedCount ?? null;
   const isPageLoading = loadingCharts || dashboardDetailLoading || ordersDetailLoading;
+
+  if (loading || subscriptionGate.loading) {
+    return (
+      <main className="min-h-screen bg-gray-50 dark:bg-slate-950 dark:text-slate-100">
+        <AppHeader leftMeta="Analytics" />
+        <section className="mx-auto flex min-h-[60vh] max-w-5xl items-center justify-center p-6">
+          <p>Loading...</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (subscriptionGate.blocked) {
+    return (
+      <main className="min-h-screen bg-gray-50 dark:bg-slate-950 dark:text-slate-100">
+        <AppHeader leftMeta="Analytics" />
+        <section className="mx-auto flex min-h-[60vh] max-w-5xl items-center justify-center p-6">
+          <p>Checking subscription...</p>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-50 to-indigo-50 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">

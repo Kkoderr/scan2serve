@@ -8,6 +8,7 @@ type UserRecord = { id: string; email: string; role: "business" | "admin" | "cus
 type BusinessRecord = {
   id: string;
   userId: string;
+  orgId: string | null;
   slug: string;
   status: "pending" | "approved" | "rejected" | "archived";
   updatedAt: Date;
@@ -340,6 +341,7 @@ describe("Layer 5 table routes", () => {
     businesses.push({
       id: "b_1",
       userId: "u_business",
+      orgId: "org_1",
       slug: "demo-biz",
       status: "approved",
       updatedAt: new Date(),

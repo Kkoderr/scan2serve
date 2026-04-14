@@ -248,6 +248,26 @@ async function main() {
     create: { orgId: org.id, userId: managerUser.id },
   });
 
+  const existingSubscription = await prisma.orgSubscription.findFirst({
+    where: { orgId: org.id },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!existingSubscription) {
+    const periodStart = new Date();
+    const periodEnd = new Date(periodStart);
+    periodEnd.setMonth(periodEnd.getMonth() + 1);
+
+    await prisma.orgSubscription.create({
+      data: {
+        orgId: org.id,
+        plan: "trial",
+        periodStart,
+        periodEnd,
+        createdByUserId: ownerUser.id,
+      },
+    });
+  }
+
   const cafe = await prisma.business.upsert({
     where: { slug: "cafe-aurora" },
     update: { status: "approved", orgId: org.id },

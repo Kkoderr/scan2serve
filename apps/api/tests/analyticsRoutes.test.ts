@@ -8,20 +8,17 @@ const fetchWarehouseDashboardWindowMock = vi.fn();
 const fetchPostgresOrdersWindowMock = vi.fn();
 const fetchWarehouseOrdersWindowMock = vi.fn();
 
-vi.mock("../src/services/analytics", async () => {
-  const actual = await vi.importActual<typeof import("../src/services/analytics")>(
-    "../src/services/analytics"
-  );
-  return {
-    ...actual,
-    fetchPostgresDashboardWindow: (...args: unknown[]) =>
-      fetchPostgresDashboardWindowMock(...args),
-    fetchWarehouseDashboardWindow: (...args: unknown[]) =>
-      fetchWarehouseDashboardWindowMock(...args),
-    fetchPostgresOrdersWindow: (...args: unknown[]) => fetchPostgresOrdersWindowMock(...args),
-    fetchWarehouseOrdersWindow: (...args: unknown[]) => fetchWarehouseOrdersWindowMock(...args),
-  };
-});
+vi.mock("../src/services/analytics", () => ({
+  fetchPostgresDashboardWindow: (...args: unknown[]) =>
+    fetchPostgresDashboardWindowMock(...args),
+  fetchWarehouseDashboardWindow: (...args: unknown[]) =>
+    fetchWarehouseDashboardWindowMock(...args),
+  fetchPostgresOrdersWindow: (...args: unknown[]) => fetchPostgresOrdersWindowMock(...args),
+  fetchWarehouseOrdersWindow: (...args: unknown[]) => fetchWarehouseOrdersWindowMock(...args),
+  getPostgresWindows: (windows?: string[]) => (windows && windows.length > 0 ? windows : ["today"]),
+  getWarehouseWindows: (windows?: string[]) =>
+    windows && windows.length > 0 ? windows : ["lastWeek"],
+}));
 
 const getAnalyticsCacheMock = vi.fn(async () => null);
 const setAnalyticsCacheMock = vi.fn(async () => undefined);

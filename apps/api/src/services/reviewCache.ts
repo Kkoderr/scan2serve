@@ -91,10 +91,12 @@ export const invalidateReviewCacheForBusiness = async (businessId: string) => {
     let cursor = 0;
     const match = `${cachePrefix}:${businessId}:*`;
     do {
-      const [nextCursor, keys] = await client.scan(cursor, {
+      const result = await client.scan(cursor, {
         MATCH: match,
         COUNT: 100,
       });
+      const nextCursor = Array.isArray(result) ? result[0] : result.cursor;
+      const keys = Array.isArray(result) ? result[1] : result.keys ?? [];
       if (keys.length > 0) {
         await client.del(keys);
       }

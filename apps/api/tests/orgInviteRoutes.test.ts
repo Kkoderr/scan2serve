@@ -42,6 +42,16 @@ const store = vi.hoisted(() => ({
   orgMemberships: [] as OrgMembershipRecord[],
   orgInvites: [] as OrgInviteRecord[],
   businesses: [] as BusinessRecord[],
+  orgSubscriptions: [] as Array<{
+    id: string;
+    orgId: string;
+    plan: string;
+    amount: number;
+    currency: string;
+    periodStart: Date;
+    periodEnd: Date;
+    createdByUserId: string;
+  }>,
   businessMemberships: [] as BusinessMembershipRecord[],
   notificationEvents: [] as NotificationEventRecord[],
   notificationInbox: [] as NotificationInboxRecord[],
@@ -122,6 +132,22 @@ const prismaMock = vi.hoisted(() => {
         const idx = store.orgMemberships.findIndex((m) => m.id === where.id);
         if (idx >= 0) store.orgMemberships.splice(idx, 1);
         return { id: where.id };
+      }),
+    },
+    orgSubscription: {
+      create: vi.fn(async ({ data }) => {
+        const record = {
+          id: nextId("orgsub", store.orgSubscriptions),
+          orgId: data.orgId,
+          plan: data.plan,
+          amount: data.amount,
+          currency: data.currency,
+          periodStart: data.periodStart,
+          periodEnd: data.periodEnd,
+          createdByUserId: data.createdByUserId,
+        };
+        store.orgSubscriptions.push(record);
+        return record;
       }),
     },
     orgInvite: {
@@ -337,6 +363,7 @@ describe("Org invites and memberships", () => {
     store.orgMemberships.length = 0;
     store.orgInvites.length = 0;
     store.businesses.length = 0;
+    store.orgSubscriptions.length = 0;
     store.businessMemberships.length = 0;
     store.notificationEvents.length = 0;
     store.notificationInbox.length = 0;
@@ -520,6 +547,7 @@ describe("Org create and membership lookup", () => {
     store.orgMemberships.length = 0;
     store.orgInvites.length = 0;
     store.businesses.length = 0;
+    store.orgSubscriptions.length = 0;
     store.businessMemberships.length = 0;
     store.notificationEvents.length = 0;
     store.notificationInbox.length = 0;

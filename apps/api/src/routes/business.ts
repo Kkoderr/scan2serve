@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import QRCode from "qrcode";
 import { DIETARY_TAGS, ORDER_STATUS_FLOW } from "@scan2serve/shared";
-import type { OrderStatus } from "@scan2serve/shared";
+import type { OrderStatus, PaidSubscriptionPlan } from "@scan2serve/shared";
 import { prisma } from "../prisma";
 import { asyncHandler } from "../utils/asyncHandler";
 import { sendError, sendSuccess } from "../utils/response";
@@ -29,6 +29,13 @@ import {
 import { fetchOrderSnapshot, publishOrderEventBestEffort } from "../services/orderEvents";
 import { normalizeStatusActors, type StatusActorInfo } from "../utils/statusActors";
 import { normalizePaymentActors } from "../utils/paymentActors";
+import {
+  createOrgTrialSubscription,
+  createPaidSubscription,
+  getOrgSubscriptionStatus,
+  getSubscriptionPlan,
+} from "../services/subscriptions";
+import { isRazorpayConfigured } from "../services/razorpay";
 
 const notifyAdmins = async (params: {
   businessId: string;
@@ -230,6 +237,16 @@ const orgInviteActionSchema = z.object({
 });
 const orgCreateSchema = z.object({
   name: z.string().trim().min(2).max(120),
+});
+const subscriptionPlanSchema = z.enum(["monthly", "quarterly", "yearly"]);
+const subscriptionCheckoutSchema = z.object({
+  plan: subscriptionPlanSchema,
+});
+const subscriptionVerifySchema = z.object({
+  plan: subscriptionPlanSchema,
+  razorpay_order_id: z.string().min(1),
+  razorpay_payment_id: z.string().min(1),
+  razorpay_signature: z.string().min(1),
 });
 const businessMembershipCreateSchema = z.object({
   businessId: z.string().min(1),
@@ -851,6 +868,11 @@ router.post(
       },
     });
 
+    await createOrgTrialSubscription({
+      orgId: org.id,
+      createdByUserId: req.user!.id,
+    });
+
     sendSuccess(res, {
       org: {
         id: org.id,
@@ -859,6 +881,156 @@ router.post(
         createdAt: org.createdAt,
         updatedAt: org.updatedAt,
       },
+    });
+  })
+);
+
+router.get(
+  "/subscription/status",
+  asyncHandler(async (req, res) => {
+    const membership = await requireOrgMembership(req, res);
+    if (!membership) return;
+
+    const status = await getOrgSubscriptionStatus(membership.orgId);
+    const canManage = await canInviteForOrg(membership, req.user!.id);
+
+    sendSuccess(res, { status, canManage });
+  })
+);
+
+router.post(
+  "/subscription/checkout",
+  asyncHandler(async (req, res) => {
+    const membership = await requireOrgMembership(req, res);
+    if (!membership) return;
+
+    const canManage = await canInviteForOrg(membership, req.user!.id);
+    if (!canManage) {
+      sendError(res, "Only owners and managers can manage subscriptions", 403, "BUSINESS_ROLE_FORBIDDEN");
+      return;
+    }
+
+    const parsed = subscriptionCheckoutSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      sendError(res, parsed.error.message, 400, "VALIDATION_ERROR");
+      return;
+    }
+
+    const plan = getSubscriptionPlan(parsed.data.plan as PaidSubscriptionPlan);
+    if (!plan) {
+      sendError(res, "Invalid subscription plan", 400, "INVALID_SUBSCRIPTION_PLAN");
+      return;
+    }
+
+    if (!isRazorpayConfigured()) {
+      sendError(res, "Razorpay not configured", 500, "RAZORPAY_NOT_CONFIGURED");
+      return;
+    }
+
+    const amount = plan.amount * 100;
+    if (!Number.isFinite(amount) || amount <= 0) {
+      sendError(res, "Invalid subscription amount", 422, "INVALID_SUBSCRIPTION_AMOUNT");
+      return;
+    }
+
+    const { getRazorpay } = await import("../services/razorpay");
+    let razorpay;
+    try {
+      razorpay = getRazorpay();
+    } catch {
+      sendError(res, "Razorpay not configured", 500, "RAZORPAY_NOT_CONFIGURED");
+      return;
+    }
+
+    const razorpayOrder = await razorpay.orders.create({
+      amount,
+      currency: plan.currency,
+      receipt: `org-${membership.orgId}`,
+      notes: {
+        orgId: membership.orgId,
+        planId: plan.id,
+      },
+    });
+
+    sendSuccess(res, {
+      razorpayOrderId: razorpayOrder.id,
+      keyId: process.env.RAZORPAY_KEY_ID,
+      amount,
+      currency: plan.currency,
+      planId: plan.id,
+    });
+  })
+);
+
+router.post(
+  "/subscription/verify",
+  asyncHandler(async (req, res) => {
+    const membership = await requireOrgMembership(req, res);
+    if (!membership) return;
+
+    const canManage = await canInviteForOrg(membership, req.user!.id);
+    if (!canManage) {
+      sendError(res, "Only owners and managers can manage subscriptions", 403, "BUSINESS_ROLE_FORBIDDEN");
+      return;
+    }
+
+    const parsed = subscriptionVerifySchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      sendError(res, "Invalid payment payload", 400, "INVALID_PAYMENT_PAYLOAD");
+      return;
+    }
+
+    const plan = getSubscriptionPlan(parsed.data.plan as PaidSubscriptionPlan);
+    if (!plan) {
+      sendError(res, "Invalid subscription plan", 400, "INVALID_SUBSCRIPTION_PLAN");
+      return;
+    }
+
+    const secret = process.env.RAZORPAY_KEY_SECRET;
+    if (!secret) {
+      sendError(res, "Razorpay not configured", 500, "RAZORPAY_NOT_CONFIGURED");
+      return;
+    }
+
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = parsed.data;
+    const payload = `${razorpay_order_id}|${razorpay_payment_id}`;
+    const expectedSignature = crypto.createHmac("sha256", secret).update(payload).digest("hex");
+    if (expectedSignature !== razorpay_signature) {
+      sendError(res, "Payment verification failed", 400, "PAYMENT_VERIFICATION_FAILED");
+      return;
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const payment = await tx.paymentRecord.create({
+        data: {
+          orgId: membership.orgId,
+          userId: req.user!.id,
+          provider: "razorpay",
+          tag: "subscription",
+          amount: plan.amount,
+          currency: plan.currency,
+          razorpayOrderId: razorpay_order_id,
+          razorpayPaymentId: razorpay_payment_id,
+        },
+      });
+
+      const subscription = await createPaidSubscription({
+        orgId: membership.orgId,
+        plan: plan.id as PaidSubscriptionPlan,
+        createdByUserId: req.user!.id,
+        paymentRecordId: payment.id,
+        prismaClient: tx,
+      });
+
+      return { payment, subscription };
+    });
+
+    const status = await getOrgSubscriptionStatus(membership.orgId);
+
+    sendSuccess(res, {
+      paymentId: result.payment.id,
+      subscriptionId: result.subscription.id,
+      status,
     });
   })
 );
@@ -897,6 +1069,10 @@ router.post(
             orgId: org.id,
             userId: req.user!.id,
           },
+        });
+        await createOrgTrialSubscription({
+          orgId: org.id,
+          createdByUserId: req.user!.id,
         });
         orgId = org.id;
       }

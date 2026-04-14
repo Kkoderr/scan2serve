@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "../../../lib/auth-context";
 import { apiFetch, CSRF_HEADER_NAME, ensureCsrfToken, getApiBase } from "../../../lib/api";
 import { showToast } from "../../../lib/toast";
+import { useSubscriptionGate } from "../../../lib/subscription";
 import { AppHeader } from "../../../components/layout/app-header";
 import { BodyBackButton } from "../../../components/layout/body-back-button";
 
@@ -33,6 +34,7 @@ type TableListResponse = {
 export default function DashboardTablesPage() {
   const { user, loading, selectedBusiness } = useAuth();
   const router = useRouter();
+  const subscriptionGate = useSubscriptionGate();
   const [rows, setRows] = useState<TableRow[]>([]);
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
@@ -226,7 +228,8 @@ export default function DashboardTablesPage() {
 
   const pageCount = Math.max(1, Math.ceil(total / limit));
 
-  if (loading) return <div className="p-6">Loading...</div>;
+  if (loading || subscriptionGate.loading) return <div className="p-6">Loading...</div>;
+  if (subscriptionGate.blocked) return <div className="p-6">Checking subscription...</div>;
   if (!user) return null;
   if (user.role !== "business") {
     return <div className="p-6">Only business users can manage tables.</div>;

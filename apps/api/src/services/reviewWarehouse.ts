@@ -26,7 +26,7 @@ export type ReviewWarehouseListRow = {
 };
 
 const formatClickhouseDateTime = (value: Date) =>
-  value.toISOString().replace("T", " ").replace("Z", "");
+  value.toISOString().replace("T", " ").replace("Z", "").split(".")[0];
 
 const escapeValue = (value: string) => value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 

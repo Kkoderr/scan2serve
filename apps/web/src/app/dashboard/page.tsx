@@ -10,6 +10,7 @@ import { BodyBackButton } from "../../components/layout/body-back-button";
 import { AnalyticsOverview } from "../../components/dashboard/analytics-overview";
 import { ModalDialog } from "../../components/ui/modal-dialog";
 import { apiFetch } from "../../lib/api";
+import { useSubscriptionGate } from "../../lib/subscription";
 import type { BusinessMemberSummary, OrgMemberSummary } from "@scan2serve/shared";
 
 const PencilIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
@@ -56,6 +57,7 @@ export default function DashboardPage() {
   const [orgChecked, setOrgChecked] = useState(false);
   const [hasOrg, setHasOrg] = useState(true);
   const [isOrgOwner, setIsOrgOwner] = useState(false);
+  const subscriptionGate = useSubscriptionGate();
   const blockedReason = selectedBusiness?.blocked
     ? "This business is blocked by an admin. Dashboard actions are disabled until it is unblocked."
     : selectedBusiness?.status === "pending"
@@ -162,12 +164,23 @@ export default function DashboardPage() {
     router.replace("/dashboard/onboarding");
   }, [businessLoading, businesses.length, isOrgOwner, router]);
 
-  if (loading || !orgChecked) {
+  if (loading || !orgChecked || subscriptionGate.loading) {
     return (
       <main className="min-h-screen bg-gray-50 dark:bg-slate-950 dark:text-slate-100">
         <AppHeader leftMeta="Business dashboard" />
         <section className="mx-auto flex min-h-[60vh] max-w-6xl items-center justify-center p-6">
           <p>Loading...</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (subscriptionGate.blocked) {
+    return (
+      <main className="min-h-screen bg-gray-50 dark:bg-slate-950 dark:text-slate-100">
+        <AppHeader leftMeta="Business dashboard" />
+        <section className="mx-auto flex min-h-[60vh] max-w-6xl items-center justify-center p-6">
+          <p>Checking subscription...</p>
         </section>
       </main>
     );

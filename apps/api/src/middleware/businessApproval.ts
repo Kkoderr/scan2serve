@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { prisma } from "../prisma";
 import { sendError } from "../utils/response";
+import { getOrgSubscriptionStatus } from "../services/subscriptions";
 
 declare global {
   namespace Express {
@@ -8,6 +9,7 @@ declare global {
       business?: {
         id: string;
         userId: string;
+        orgId: string | null;
         status: "pending" | "approved" | "rejected" | "archived";
       };
       businessRole?: "owner" | "manager" | "staff";
@@ -157,9 +159,24 @@ export const requireApprovedBusiness = async (
     return sendError(res, "This business is blocked by admin", 403, "BUSINESS_BLOCKED");
   }
 
+  if (!business.orgId) {
+    return sendError(res, "Org subscription required", 403, "ORG_REQUIRED");
+  }
+
+  const subscription = await getOrgSubscriptionStatus(business.orgId);
+  if (!subscription.isActive) {
+    return sendError(
+      res,
+      "Active subscription required to access this dashboard feature",
+      403,
+      "SUBSCRIPTION_REQUIRED"
+    );
+  }
+
   req.business = {
     id: business.id,
     userId: business.userId,
+    orgId: business.orgId ?? null,
     status: business.status,
   };
 

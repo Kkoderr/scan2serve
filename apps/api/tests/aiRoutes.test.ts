@@ -8,6 +8,7 @@ type UserRecord = { id: string; email: string; role: "business" | "admin" | "cus
 type BusinessRecord = {
   id: string;
   userId: string;
+  orgId: string | null;
   status: "pending" | "approved" | "rejected" | "archived";
 };
 
@@ -129,7 +130,7 @@ describe("AI routes", () => {
     businessMemberships.length = 0;
     generateItemDescriptionMock.mockReset();
     users.push({ id: "u_business", email: "biz@example.com", role: "business" });
-    businesses.push({ id: "b_1", userId: "u_business", status: "approved" });
+    businesses.push({ id: "b_1", userId: "u_business", status: "approved", orgId: "org_1" });
     businessMemberships.push({
       id: "bm_1",
       businessId: "b_1",

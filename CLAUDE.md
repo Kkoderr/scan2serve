@@ -853,3 +853,24 @@ This section is the high-level source of truth for what is already implemented a
 
 ## Updates 2026-04-13
 - Included `apps/api/scripts` in the production API image to support in-container seeding (`apps/api/Dockerfile`).
+
+## Updates 2026-04-13
+- Updated ADR-058 to add a free 1-month org subscription on org creation and confirmed the Q&A answers (`docs/adr/ADR-058-org-subscriptions-dashboard-gating.md`).
+- Decision: org subscriptions will be enforced at both API and UI per ADR-058 answers. Impact: dashboard access gating will include backend enforcement once implemented.
+- Next: implement ADR-058 (schema + API + UI + cache + Razorpay flow).
+
+## Updates 2026-04-13
+- Implemented ADR-058 org subscription gating with Razorpay checkout/verify, Redis-backed status cache, and free 1-month org trial on org creation (`apps/api/src/services/subscriptions.ts`, `apps/api/src/routes/business.ts`).
+- Added subscription enforcement in API middleware and dashboard pages plus subscription UI (`apps/api/src/middleware/businessApproval.ts`, `apps/web/src/lib/subscription.ts`, `apps/web/src/app/dashboard/subscription/page.tsx`).
+- Decision: subscription enforcement applies to both API and UI for owners/managers/staff; staff are blocked from subscription purchase UI. Impact: dashboard feature access now requires active org subscription.
+- Next: run API/web tests and apply migration in DB when ready.
+
+## Updates 2026-04-14
+- Stabilized API test mocks for org subscriptions and org gating (orgId on mock businesses, org subscription mocks, and `createOrgTrialSubscription` stub) and updated analytics test mocking to avoid Prisma client imports (`apps/api/tests/*`, `apps/api/vitest.setup.ts`).
+- Fixed subscription route tests to use API `status` responses and normalized auth mocks (`apps/api/tests/subscriptionRoutes.test.ts`).
+- Added React import in root page and mocked subscription gate in dashboard/menu tests to avoid loading-state flakes (`apps/web/src/app/page.tsx`, `apps/web/tests/dashboard.test.tsx`, `apps/web/tests/menu-page.test.tsx`).
+- Verified API and web test suites pass locally.
+- Updated dev compose/db credentials to match `apps/api/.env` and use the `db` host in Docker (`apps/api/.env`, `docker-compose.yml`).
+- Ensure dockerized API boot builds the shared package before running dev to avoid missing `@scan2serve/shared/dist` (`docker-compose.yml`).
+- Normalized review warehouse `created_at` to second precision to satisfy ClickHouse DateTime parsing (`apps/api/src/services/reviewWarehouse.ts`).
+- Fixed review cache invalidation scan handling for redis client return shape (`apps/api/src/services/reviewCache.ts`).

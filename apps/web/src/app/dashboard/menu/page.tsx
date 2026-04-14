@@ -7,6 +7,7 @@ import { DIETARY_TAGS, type Category, type MenuItem } from "@scan2serve/shared";
 import { useAuth } from "../../../lib/auth-context";
 import { apiFetch } from "../../../lib/api";
 import { showToast } from "../../../lib/toast";
+import { useSubscriptionGate } from "../../../lib/subscription";
 import { ModalDialog } from "../../../components/ui/modal-dialog";
 import { AppHeader } from "../../../components/layout/app-header";
 import { BodyBackButton } from "../../../components/layout/body-back-button";
@@ -91,6 +92,7 @@ const CATEGORY_CARD_TONES = [
 export default function DashboardMenuPage() {
   const { user, loading, selectedBusiness } = useAuth();
   const router = useRouter();
+  const subscriptionGate = useSubscriptionGate();
   const currencyFormatter = useMemo(() => {
     const currency = selectedBusiness?.currencyCode || "USD";
     return new Intl.NumberFormat("en-US", {
@@ -311,12 +313,22 @@ export default function DashboardMenuPage() {
     };
   }, [blocked, headers, selectedBusiness, selectedCategoryId, categories, itemTotal, itemName]);
 
-  if (loading) {
+  if (loading || subscriptionGate.loading) {
     return (
       <main className="min-h-screen bg-gray-50">
         <AppHeader leftMeta="Menu management" />
         <section className="mx-auto flex min-h-[60vh] max-w-6xl items-center justify-center p-6">
           <p>Loading...</p>
+        </section>
+      </main>
+    );
+  }
+  if (subscriptionGate.blocked) {
+    return (
+      <main className="min-h-screen bg-gray-50">
+        <AppHeader leftMeta="Menu management" />
+        <section className="mx-auto flex min-h-[60vh] max-w-6xl items-center justify-center p-6">
+          <p>Checking subscription...</p>
         </section>
       </main>
     );

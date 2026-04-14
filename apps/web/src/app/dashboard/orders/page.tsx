@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "../../../lib/auth-context";
 import { apiFetch } from "../../../lib/api";
 import { showToast } from "../../../lib/toast";
+import { useSubscriptionGate } from "../../../lib/subscription";
 import { AppHeader } from "../../../components/layout/app-header";
 import { BodyBackButton } from "../../../components/layout/body-back-button";
 import { AnalyticsOverview } from "../../../components/dashboard/analytics-overview";
@@ -185,6 +186,7 @@ const ActivityTimeline = ({ detailOrder }: { detailOrder: OrderDetail }) => {
 export default function DashboardOrdersPage() {
   const { user, loading, selectedBusiness } = useAuth();
   const router = useRouter();
+  const subscriptionGate = useSubscriptionGate();
   const [statusFilters, setStatusFilters] = useState<Record<OrderStatus, boolean>>({
     pending: true,
     confirmed: true,
@@ -566,7 +568,8 @@ export default function DashboardOrdersPage() {
     });
   }, [orders, sortOption, statusFilters, pinnedOrderIds]);
 
-  if (loading) return <div className="p-6">Loading...</div>;
+  if (loading || subscriptionGate.loading) return <div className="p-6">Loading...</div>;
+  if (subscriptionGate.blocked) return <div className="p-6">Checking subscription...</div>;
   if (!user) return null;
   if (user.role !== "business") {
     return <div className="p-6">Only business users can manage orders.</div>;

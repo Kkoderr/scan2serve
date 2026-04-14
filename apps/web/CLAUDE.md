@@ -529,3 +529,12 @@ pnpm lint   # run Next.js ESLint
 
 ## Updates 2026-04-13
 - Replaced `window.setTimeout` usage with `globalThis` + `setTimeout` in analytics page to avoid Next build typing issues (`apps/web/src/app/dashboard/analytics/page.tsx`).
+
+## Updates 2026-04-13
+- Added subscription gate hook and applied it across dashboard pages (`src/lib/subscription.ts`, `src/app/dashboard/*`).
+- Added subscription purchase page + locked page with Razorpay checkout flow (`src/app/dashboard/subscription/page.tsx`, `src/app/dashboard/subscription/locked/page.tsx`).
+- Updated menu tests to account for subscription status fetch (`tests/menu-page.test.tsx`).
+
+## Updates 2026-04-14
+- Added React import to root app page to satisfy Vitest runtime (`src/app/page.tsx`).
+- Mocked subscription gate in dashboard/menu tests and updated pending-business expectation accordingly (`tests/dashboard.test.tsx`, `tests/menu-page.test.tsx`).

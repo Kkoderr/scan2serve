@@ -25,6 +25,10 @@ vi.mock("../src/lib/auth-context", () => ({
   useAuth: () => useAuthMock(),
 }));
 
+vi.mock("../src/lib/subscription", () => ({
+  useSubscriptionGate: () => ({ loading: false, blocked: false }),
+}));
+
 describe("DashboardPage", () => {
   beforeEach(() => {
     pushMock.mockReset();

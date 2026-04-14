@@ -199,6 +199,9 @@ pnpm db:studio    # open Prisma Studio GUI
 - Sample seed now populates order status actors and builds ~60-day order history per business when data is sparse (`scripts/seed-sample-data.ts`).
 - Sample seed now targets ~120 orders per business across ~180 days (`scripts/seed-sample-data.ts`).
 
+## Updates 2026-04-14
+- Sample seed now ensures the sample org has an `org_subscriptions` row (`scripts/seed-sample-data.ts`).
+
 ## Updates 2026-04-11
 - Added OrderPin back-relations to `User`, `Business`, and `Order` for Prisma validation (`prisma/schema.prisma`).
 - Sample seed now populates `paymentActors` for cash-paid orders and seeds per-user order pins (`scripts/seed-sample-data.ts`).
@@ -390,3 +393,27 @@ pnpm db:studio    # open Prisma Studio GUI
 
 ## Updates 2026-04-13
 - Added `apps/api/scripts` to the production image so `db:seed:sample` runs from the container (`apps/api/Dockerfile`).
+
+## Updates 2026-04-13
+- Added org subscription + payment record schema models and migration (`prisma/schema.prisma`, `prisma/migrations/20260413160000_org_subscriptions`).
+- Implemented subscription cache/service with expiry notifications and paid/trial creation helpers (`src/services/subscriptions.ts`).
+- Enforced active subscription in `requireApprovedBusiness` and added org subscription endpoints (status/checkout/verify) plus trial creation on org create (`src/middleware/businessApproval.ts`, `src/routes/business.ts`).
+- Added subscription caching env knobs and API test coverage + default test mock in `vitest.setup.ts` (`.env.example`, `tests/subscriptionRoutes.test.ts`, `vitest.setup.ts`).
+
+## Updates 2026-04-14
+- Updated API route tests to include orgId on mocked businesses so subscription gating passes (`tests/menuRoutes.test.ts`, `tests/tableRoutes.test.ts`, `tests/orderManagementRoutes.test.ts`, `tests/aiRoutes.test.ts`, `tests/onboardingRoutes.test.ts`).
+- Added org subscription mocks and reset hooks for org/onboarding flows and stabilized subscription test expectations (`tests/orgInviteRoutes.test.ts`, `tests/onboardingRoutes.test.ts`, `tests/subscriptionRoutes.test.ts`).
+- Mocked `createOrgTrialSubscription` in Vitest setup to avoid Redis hangs during org creation tests (`vitest.setup.ts`).
+- Simplified analytics service mocks to avoid Prisma client import errors in tests (`tests/analyticsRoutes.test.ts`).
+
+## Updates 2026-04-14
+- Updated dev compose/db credentials to align with `apps/api/.env` and container host (`apps/api/.env`, `docker-compose.yml`).
+
+## Updates 2026-04-14
+- Ensure dockerized API build compiles shared package before dev boot to avoid missing `@scan2serve/shared/dist` (`docker-compose.yml`).
+
+## Updates 2026-04-14
+- Normalize review warehouse `created_at` to second precision to match ClickHouse DateTime and avoid JSONEachRow parse errors (`src/services/reviewWarehouse.ts`).
+
+## Updates 2026-04-14
+- Fixed review cache invalidation scan handling to support redis scan return object shape (`src/services/reviewCache.ts`).

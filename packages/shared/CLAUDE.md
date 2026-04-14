@@ -75,3 +75,6 @@ import { UserRole, OrderStatus, ORDER_STATUS_FLOW } from "@scan2serve/shared";
 
 ## Updates 2026-04-13
 - Added TypeScript as a dev dependency so `pnpm --filter @scan2serve/shared build` works in container builds (`packages/shared/package.json`).
+
+## Updates 2026-04-13
+- Added subscription plan constants/types and subscription status contract; added `SUBSCRIPTION_EXPIRED` notification type (`packages/shared/src/types.ts`).

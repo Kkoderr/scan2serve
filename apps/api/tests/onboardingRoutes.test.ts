@@ -85,6 +85,16 @@ const orgs: OrgRecord[] = [];
 const orgMemberships: OrgMembershipRecord[] = [];
 const businessMemberships: BusinessMembershipRecord[] = [];
 const businesses: BusinessRecord[] = [];
+const orgSubscriptions: Array<{
+  id: string;
+  orgId: string;
+  plan: string;
+  amount: number;
+  currency: string;
+  periodStart: Date;
+  periodEnd: Date;
+  createdByUserId: string;
+}> = [];
 const rejections: RejectionRecord[] = [];
 const tables: TableRecord[] = [];
 const qrCodes: QrCodeRecord[] = [];
@@ -141,6 +151,22 @@ vi.mock("../src/prisma", () => ({
         const idx = orgMemberships.findIndex((m) => m.id === where.id);
         if (idx >= 0) orgMemberships.splice(idx, 1);
         return { id: where.id };
+      }),
+    },
+    orgSubscription: {
+      create: vi.fn(async ({ data }) => {
+        const record = {
+          id: `orgsub_${orgSubscriptions.length + 1}`,
+          orgId: data.orgId,
+          plan: data.plan,
+          amount: data.amount,
+          currency: data.currency,
+          periodStart: data.periodStart,
+          periodEnd: data.periodEnd,
+          createdByUserId: data.createdByUserId,
+        };
+        orgSubscriptions.push(record);
+        return record;
       }),
     },
     business: {
@@ -462,6 +488,7 @@ describe("Layer 3 onboarding routes", () => {
     orgMemberships.length = 0;
     businessMemberships.length = 0;
     businesses.length = 0;
+    orgSubscriptions.length = 0;
     rejections.length = 0;
     tables.length = 0;
     qrCodes.length = 0;
@@ -602,6 +629,7 @@ describe("Layer 3 onboarding routes", () => {
     businesses.push({
       id: "b_pending",
       userId: users[0].id,
+      orgId: "org_1",
       name: "Pending Bistro",
       slug: "pending-bistro",
       currencyCode: "USD",
@@ -619,6 +647,7 @@ describe("Layer 3 onboarding routes", () => {
     businesses.push({
       id: "b_approved",
       userId: users[0].id,
+      orgId: "org_1",
       name: "Approved Bistro",
       slug: "approved-bistro",
       currencyCode: "USD",
@@ -669,6 +698,7 @@ describe("Layer 3 onboarding routes", () => {
     businesses.push({
       id: "b_gate",
       userId: users[0].id,
+      orgId: "org_1",
       name: "Gate Bistro",
       slug: "gate-bistro",
       currencyCode: "USD",
@@ -719,6 +749,7 @@ describe("Layer 3 onboarding routes", () => {
     businesses.push({
       id: "b_archive",
       userId: businessUser.id,
+      orgId: "org_1",
       name: "Archive Cafe",
       slug: "archive-cafe",
       currencyCode: "USD",
@@ -760,6 +791,7 @@ describe("Layer 3 onboarding routes", () => {
     businesses.push({
       id: "b_archive_old",
       userId: businessUser.id,
+      orgId: "org_1",
       name: "Old Archive",
       slug: "old-archive",
       currencyCode: "USD",
@@ -789,6 +821,7 @@ describe("Layer 3 onboarding routes", () => {
     businesses.push({
       id: "b_qr",
       userId: users[0].id,
+      orgId: "org_1",
       name: "QR Bistro",
       slug: "qr-bistro",
       currencyCode: "USD",
@@ -845,6 +878,7 @@ describe("Layer 3 onboarding routes", () => {
     businesses.push({
       id: "b_hist",
       userId: users[0].id,
+      orgId: "org_1",
       name: "QR Hist",
       slug: "qr-hist",
       currencyCode: "USD",

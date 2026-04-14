@@ -9,16 +9,17 @@
 
 ## Last Session
 
-**Date:** 2026-04-13
+**Date:** 2026-04-14
 **What was done:**
-- Included `apps/api/scripts` in the production API image so seeding scripts run inside the container (`apps/api/Dockerfile`).
+- Fixed Prisma enum mapping mismatch for org subscriptions by mapping Prisma enums to the snake_case Postgres types.
+- Updated sample data seed to create an `org_subscriptions` row for the seeded org (trial period).
 
 **What's NOT done yet:**
-- Rebuild and recreate the API image, then re-run `db:seed:sample` to populate reviews and older windows.
+- Apply the migration (`20260413160000_org_subscriptions`) in the dev DB volume currently used by `dev-compose.sh` (reset volume first if needed).
 
 **Next step:**
-1. Rebuild images and recreate the API container.
-2. Re-run `pnpm --filter @scan2serve/api db:seed:sample`.
+1. Restart `./scripts/dev-compose.sh` so the API re-runs `db:migrate:deploy` with the updated Prisma enum mappings.
+2. Re-run `pnpm --filter @scan2serve/api db:seed:sample` if you want the org subscription sample row created.
 
 **Build progress:**
 ```
@@ -1070,6 +1071,12 @@ Layer 11: Polish & Deploy
 ### 2026-04-10 — Session 228: Review analytics expansion
 - Accepted ADR-053 and added review analytics aggregation + UI (avg rating, conversion, likes per review, rating distribution, trend).
 
+### 2026-04-13 — Session: ADR-058 subscription trial note
+- Updated ADR-058 to grant new orgs a free 1-month subscription window and confirmed the Q&A answers.
+
+### 2026-04-13 — Session: ADR-058 implementation
+- Implemented org subscription gating with Razorpay checkout/verify, free 1-month trial, API enforcement, and dashboard subscription UI.
+
 
 ## Decisions Log
 
@@ -1508,3 +1515,23 @@ pnpm --filter @scan2serve/api db:seed      # seed admin user
 
 ### 2026-04-13 — Session: Seed scripts in prod image
 - Copied API scripts into the production image so seeding works in-container.
+
+### 2026-04-14 — Session: Subscription test stabilization
+- Added org subscription mocks and orgId updates in API tests, stubbed trial creation in Vitest setup, and simplified analytics test mocks.
+- Fixed subscription route test expectations to use `status` responses and updated auth mocks.
+- Added React import for root page and mocked subscription gate in web dashboard/menu tests.
+- Re-ran API and web test suites successfully.
+- Updated dev compose/db credentials to align with `apps/api/.env` for dockerized DB connections.
+- Updated API compose command to build shared package before running dev.
+- Normalized review warehouse `created_at` to second precision for ClickHouse ingestion.
+- Fixed review cache invalidation scan handling for redis scan return shape.
+
+### 2026-04-14 — Session: Org subscription seed + enum mapping
+- Mapped Prisma `SubscriptionPlan`/payment enums to their snake_case Postgres types to avoid `type "public.SubscriptionPlan" does not exist`.
+- Sample seed script now creates an `org_subscriptions` row for the seeded org.
+
+### 2026-04-14 — Session: ADR-059 trial activation
+- Drafted ADR-059 to make the 1-month free trial an explicit activation on the subscription page (org starts blocked until redeemed).
+
+### 2026-04-14 — Session: ADR-059 scrapped
+- Removed ADR-059 draft files per user request.

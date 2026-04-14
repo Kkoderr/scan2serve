@@ -29,7 +29,7 @@ import businessRouter from "../src/routes/business";
 
 type BusinessStatus = "pending" | "approved" | "rejected" | "archived";
 type UserRecord = { id: string; email: string; role: "business" | "admin" | "customer" };
-type BusinessRecord = { id: string; userId: string; status: BusinessStatus };
+type BusinessRecord = { id: string; userId: string; status: BusinessStatus; orgId: string | null };
 type CategoryRecord = {
   id: string;
   businessId: string;
@@ -395,7 +395,7 @@ describe("Layer 4 menu routes", () => {
     businessMemberships.length = 0;
 
     users.push({ id: "u_business", email: "biz@example.com", role: "business" });
-    businesses.push({ id: "b_1", userId: "u_business", status: "approved" });
+    businesses.push({ id: "b_1", userId: "u_business", status: "approved", orgId: "org_1" });
     uploadImageObjectMock.mockReset();
     generateMenuItemImageMock.mockReset();
   });
@@ -472,8 +472,8 @@ describe("Layer 4 menu routes", () => {
   it("prefers approved business when header is absent and user has mixed statuses", async () => {
     const user = users[0];
     businesses.length = 0;
-    businesses.push({ id: "b_pending", userId: "u_business", status: "pending" });
-    businesses.push({ id: "b_approved", userId: "u_business", status: "approved" });
+    businesses.push({ id: "b_pending", userId: "u_business", status: "pending", orgId: "org_1" });
+    businesses.push({ id: "b_approved", userId: "u_business", status: "approved", orgId: "org_1" });
 
     const created = await run("POST", "/categories", {
       user,
